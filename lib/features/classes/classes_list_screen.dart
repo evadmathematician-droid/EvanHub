@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../app/routes.dart';
 import '../../models/school_class.dart';
 import '../../models/school_level.dart';
+import '../../models/user_role.dart';
 import '../../services/class_service.dart';
 import '../../state/auth_controller.dart';
 import '../../widgets/status_views.dart';
@@ -61,6 +62,8 @@ class _ClassesListScreenState extends State<ClassesListScreen> {
     final auth = context.read<AuthController>();
     final service = ClassService(auth.tenant!);
     final canEdit = auth.role.canManageStudents;
+    // The database rules let only school admins write promotions.
+    final canPromote = auth.role == UserRole.schoolAdmin;
 
     return Scaffold(
       appBar: AppBar(
@@ -72,7 +75,7 @@ class _ClassesListScreenState extends State<ClassesListScreen> {
               onPressed: () => _addStandard(service),
               icon: const Icon(Icons.playlist_add),
             ),
-          if (canEdit)
+          if (canPromote)
             IconButton(
               tooltip: 'Promote a class',
               onPressed: () => context.push(Routes.promote),

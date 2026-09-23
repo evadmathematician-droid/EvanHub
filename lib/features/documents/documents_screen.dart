@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../../models/school_document.dart';
 import '../../services/document_service.dart';
 import '../../state/auth_controller.dart';
+import '../../widgets/delete_helpers.dart';
 import '../../widgets/status_views.dart';
 
 class DocumentsScreen extends StatefulWidget {
@@ -75,6 +76,17 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
     );
   }
 
+  Future<void> _delete(DocumentService service, SchoolDocument d) async {
+    final ok = await confirmDelete(
+      context,
+      title: 'Delete document?',
+      message: '"${d.title}" will be removed from the documents list.',
+    );
+    if (!ok || !mounted) return;
+    await runDelete(context, () => service.delete(d),
+        done: '"${d.title}" deleted.');
+  }
+
   void _snack(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
@@ -121,7 +133,8 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
             trailing: canUpload
                 ? IconButton(
                     icon: const Icon(Icons.delete_outline),
-                    onPressed: () => service.delete(d),
+                    tooltip: 'Delete document',
+                    onPressed: () => _delete(service, d),
                   )
                 : null,
           ),

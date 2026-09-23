@@ -2,9 +2,11 @@ import 'dart:async';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../app/routes.dart';
 import '../../models/school_class.dart';
 import '../../models/school_level.dart';
 import '../../models/student.dart';
@@ -13,6 +15,7 @@ import '../../services/cloudinary_service.dart';
 import '../../services/student_service.dart';
 import '../../state/auth_controller.dart';
 import '../../theme/app_colors.dart';
+import '../../widgets/delete_helpers.dart';
 
 /// Exams recorded on a student. Which ones show depends on the class and
 /// status (see `_exams`): NPSE, BECE (SSS only) and WASSCE (graduated SSS).
@@ -173,19 +176,6 @@ class _StudentFormScreenState extends State<StudentFormScreen> {
     super.dispose();
   }
 
-  /// Creates the standard class ladder for [level] when the school has no
-  /// classes at that level yet, so the Class dropdown is never empty.
-  Future<void> _ensureStandardClasses(SchoolLevel? level) async {
-    if (level == null || _classes.any((c) => c.level == level)) return;
-    try {
-      await ClassService(context.read<AuthController>().tenant!)
-          .addStandardClasses(level,
-              academicYear: DateTime.now().year.toString());
-    } catch (e) {
-      if (mounted) setState(() => _error = 'Could not create classes: $e');
-    }
-  }
-
   String _formatDate(DateTime? d) =>
       d == null ? '' : DateFormat('d MMM yyyy').format(d);
 
@@ -307,25 +297,20 @@ class _StudentFormScreenState extends State<StudentFormScreen> {
   }
 
   Future<void> _confirmDelete() async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete student?'),
-        content: Text('${widget.existing!.fullName} will be removed.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel')),
-          TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Delete')),
-        ],
-      ),
+    final student = widget.existing!;
+    final ok = await confirmDelete(
+      context,
+      title: 'Delete student?',
+      message: '${student.fullName} will be removed.',
     );
-    if (ok != true || !mounted) return;
+    if (!ok || !mounted) return;
     final service = StudentService(context.read<AuthController>().tenant!);
-    await service.delete(widget.existing!.id);
-    if (mounted) Navigator.of(context).pop();
+    final deleted = await runDelete(
+      context,
+      () => service.delete(student.id),
+      done: '${student.fullName} deleted.',
+    );
+    if (deleted && mounted) Navigator.of(context).pop();
   }
 
   String? _required(String? v) =>
@@ -440,7 +425,6 @@ class _StudentFormScreenState extends State<StudentFormScreen> {
                 _stage = null;
                 _classId = null;
                 _department = null;
-                _ensureStandardClasses(v);
               }),
               validator: (v) => v == null ? 'Choose a level' : null,
             ),
@@ -473,13 +457,7 @@ class _StudentFormScreenState extends State<StudentFormScreen> {
               initialValue: levelClasses.any((c) => c.id == _classId)
                   ? _classId
                   : null,
-              decoration: InputDecoration(
-                labelText: 'Class *',
-                helperText: _level != null && levelClasses.isEmpty
-                    ? 'No ${_level!.label} classes yet — add them under '
-                        'More → Classes.'
-                    : null,
-              ),
+              decoration: const InputDecoration(labelText: 'Class *'),
               items: [
                 for (final c in levelClasses)
                   DropdownMenuItem(value: c.id, child: Text(c.name)),
@@ -490,6 +468,14 @@ class _StudentFormScreenState extends State<StudentFormScreen> {
               }),
               validator: (v) => v == null ? 'Choose a class' : null,
             ),
+            if (_level != null && levelClasses.isEmpty) ...[
+              const SizedBox(height: 8),
+              _NoClassesNote(
+                what: isSecondary && stage != null
+                    ? (stage == SecondaryStage.junior ? 'JSS' : 'SSS')
+                    : _level!.label,
+              ),
+            ],
             if (_needsDepartment) ...[
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
@@ -567,6 +553,33 @@ class _StudentFormScreenState extends State<StudentFormScreen> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Shown when the chosen level has no classes. Classes are created on the
+/// Classes screen; the student form never creates them itself.
+class _NoClassesNote extends StatelessWidget {
+  const _NoClassesNote({required this.what});
+
+  /// "Primary", "JSS", … — the level or section that has no classes.
+  final String what;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        const Icon(Icons.info_outline, color: AppColors.warning, size: 20),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text('There are no $what classes yet. Add them on the '
+              'Classes screen first.'),
+        ),
+        TextButton(
+          onPressed: () => context.push(Routes.classes),
+          child: const Text('Open Classes'),
+        ),
+      ],
     );
   }
 }

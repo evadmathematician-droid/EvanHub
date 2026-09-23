@@ -6,6 +6,7 @@ import '../../models/school_level.dart';
 import '../../services/class_service.dart';
 import '../../state/auth_controller.dart';
 import '../../theme/app_colors.dart';
+import '../../widgets/delete_helpers.dart';
 
 class ClassFormScreen extends StatefulWidget {
   const ClassFormScreen({super.key, this.existing});
@@ -77,27 +78,26 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
   }
 
   Future<void> _confirmDelete() async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete class?'),
-        content: Text(
-            '${widget.existing!.name} will be removed. Students keep their '
-            'records but become unassigned.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel')),
-          TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Delete')),
-        ],
-      ),
+    final schoolClass = widget.existing!;
+    final ok = await confirmDelete(
+      context,
+      title: 'Delete class?',
+      message: '${schoolClass.name} will be removed. Students keep their '
+          'records but become unassigned.',
     );
-    if (ok != true || !mounted) return;
+    if (!ok || !mounted) return;
     final service = ClassService(context.read<AuthController>().tenant!);
-    await service.delete(widget.existing!.id);
-    if (mounted) Navigator.of(context).pop();
+    var unassigned = 0;
+    final deleted = await runDelete(
+      context,
+      () async => unassigned = await service.delete(schoolClass.id),
+    );
+    if (!deleted || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text('${schoolClass.name} deleted'
+          '${unassigned == 0 ? '' : '. $unassigned student(s) unassigned'}.'),
+    ));
+    Navigator.of(context).pop();
   }
 
   @override

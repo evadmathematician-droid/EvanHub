@@ -54,5 +54,18 @@ class ClassService {
     return _refs.classes.child(schoolClass.id).update(schoolClass.toMap());
   }
 
-  Future<void> delete(String id) => _refs.classes.child(id).remove();
+  /// Deletes the class and unassigns its students (classId set to '') in one
+  /// atomic multi-path update, so no student is left pointing at a missing
+  /// class. Returns how many students were unassigned.
+  Future<int> delete(String id) async {
+    final students = await _refs.students.get();
+    final updates = <String, Object?>{'classes/$id': null};
+    for (final s in students.children) {
+      if (s.key != null && asMap(s.value)['classId'] == id) {
+        updates['students/${s.key}/classId'] = '';
+      }
+    }
+    await _refs.school.update(updates);
+    return updates.length - 1;
+  }
 }

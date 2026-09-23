@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../models/school_class.dart';
 import '../../models/school_level.dart';
+import '../../models/user_role.dart';
 import '../../services/class_service.dart';
 import '../../services/promotion_service.dart';
 import '../../state/auth_controller.dart';
@@ -19,10 +20,45 @@ class PromotionScreen extends StatefulWidget {
   State<PromotionScreen> createState() => _PromotionScreenState();
 }
 
+/// What promoting a class means, based on the standard class ladder.
+enum _Outcome { promote, graduate, notInLadder }
+
+class _Plan {
+  const _Plan(this.outcome, {this.level, this.rung = -1});
+
+  final _Outcome outcome;
+
+  /// Target level and ladder position; set only for [_Outcome.promote].
+  final SchoolLevel? level;
+  final int rung;
+
+  StandardClass get next => level!.standardClasses[rung];
+
+  /// True for classes at the target rung (including sections like "JSS 2 B").
+  bool isTarget(SchoolClass c) =>
+      c.level == level && level!.rungOf(c.name) == rung;
+
+  /// Pupils in [from] go to the next class in its level's ladder. Pre-primary
+  /// has no leaving exam, so Pre 2 moves up to Primary Class 1; the final
+  /// Primary and Secondary classes (Class 6, SSS 3) graduate.
+  static _Plan of(SchoolClass from) {
+    final level = from.level;
+    final rung = level?.rungOf(from.name) ?? -1;
+    if (level == null || rung < 0) return const _Plan(_Outcome.notInLadder);
+    if (rung < level.standardClasses.length - 1) {
+      return _Plan(_Outcome.promote, level: level, rung: rung + 1);
+    }
+    if (level == SchoolLevel.prePrimary) {
+      return const _Plan(_Outcome.promote,
+          level: SchoolLevel.primary, rung: 0);
+    }
+    return const _Plan(_Outcome.graduate);
+  }
+}
+
 class _PromotionScreenState extends State<PromotionScreen> {
   String? _fromClassId;
   String? _toClassId;
-  bool _graduate = false;
   final _year = TextEditingController(text: DateTime.now().year.toString());
   bool _busy = false;
   String? _message;
@@ -33,20 +69,21 @@ class _PromotionScreenState extends State<PromotionScreen> {
     super.dispose();
   }
 
-  Future<void> _run(List<SchoolClass> classes) async {
-    if (_fromClassId == null) return;
-    if (!_graduate && _toClassId == null) return;
-    final from = classes.firstWhere((c) => c.id == _fromClassId);
+  Future<void> _run(SchoolClass from, _Plan plan, String? toClassId) async {
+    final graduate = plan.outcome == _Outcome.graduate;
+    if (!graduate && toClassId == null) return;
     final auth = context.read<AuthController>();
     final service = PromotionService(auth.tenant!);
 
     // JSS 3 to SSS 1 (as in the Ninka app): every pupil needs a BECE record
     // before they can move up, so collect any that are missing first.
-    final requireBece = !_graduate && isFinalJuniorClassName(from.name);
-    // Graduating SSS 3 needs each pupil's WASSCE record.
-    final requireWassce = _graduate &&
+    final requireBece = !graduate &&
         from.level == SchoolLevel.secondary &&
-        SchoolLevel.secondary.isFinalClassName(from.name);
+        plan.next.stage == SecondaryStage.senior &&
+        from.level!.standardClasses[plan.rung - 1].stage ==
+            SecondaryStage.junior;
+    // Graduating SSS 3 needs each pupil's WASSCE record.
+    final requireWassce = graduate && from.level == SchoolLevel.secondary;
 
     setState(() {
       _busy = true;
@@ -73,7 +110,7 @@ class _PromotionScreenState extends State<PromotionScreen> {
 
       final result = await service.promoteClass(
         fromClassId: from.id,
-        toClassId: _graduate ? null : _toClassId,
+        toClassId: graduate ? null : toClassId,
         academicYear: _year.text.trim(),
         promotedBy: auth.appUser?.uid ?? '',
         requireBece: requireBece,
@@ -81,7 +118,7 @@ class _PromotionScreenState extends State<PromotionScreen> {
         bece: bece,
       );
       setState(() => _message = [
-            _graduate
+            graduate
                 ? '${result.moved} student(s) marked as graduated.'
                 : 'Promoted ${result.moved} student(s).',
             if (result.skipped.isNotEmpty)
@@ -97,7 +134,17 @@ class _PromotionScreenState extends State<PromotionScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final service = ClassService(context.read<AuthController>().tenant!);
+    final auth = context.read<AuthController>();
+    if (auth.role != UserRole.schoolAdmin) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Promote a class')),
+        body: const EmptyView(
+          message: 'Only school admins can promote classes.',
+          icon: Icons.lock_outline,
+        ),
+      );
+    }
+    final service = ClassService(auth.tenant!);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Promote a class')),
@@ -112,37 +159,74 @@ class _PromotionScreenState extends State<PromotionScreen> {
           if (classes.isEmpty) {
             return const EmptyView(message: 'Create classes first.');
           }
+
+          SchoolClass? from;
+          for (final c in classes) {
+            if (c.id == _fromClassId) from = c;
+          }
+          final plan = from == null ? null : _Plan.of(from);
+          final targets = plan?.outcome == _Outcome.promote
+              ? classes.where(plan!.isTarget).toList()
+              : const <SchoolClass>[];
+          // Keep the choice only while it is still a valid target; pick the
+          // target automatically when there is just one.
+          final toClassId = targets.any((c) => c.id == _toClassId)
+              ? _toClassId
+              : (targets.length == 1 ? targets.first.id : null);
+          final canRun = from != null &&
+              (plan!.outcome == _Outcome.graduate || toClassId != null);
+
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
               DropdownButtonFormField<String>(
-                initialValue: _fromClassId,
+                initialValue: from?.id,
                 decoration: const InputDecoration(labelText: 'From class'),
                 items: classes
                     .map((c) =>
                         DropdownMenuItem(value: c.id, child: Text(c.name)))
                     .toList(),
-                onChanged: (v) => setState(() => _fromClassId = v),
+                onChanged: (v) => setState(() {
+                  _fromClassId = v;
+                  _toClassId = null;
+                  _message = null;
+                }),
               ),
               const SizedBox(height: 12),
-              SwitchListTile(
-                title: const Text('Graduate (leave school)'),
-                value: _graduate,
-                onChanged: (v) => setState(() => _graduate = v),
-              ),
-              if (!_graduate) ...[
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  initialValue: _toClassId,
-                  decoration: const InputDecoration(labelText: 'To class'),
-                  items: classes
-                      .where((c) => c.id != _fromClassId)
-                      .map((c) =>
-                          DropdownMenuItem(value: c.id, child: Text(c.name)))
-                      .toList(),
-                  onChanged: (v) => setState(() => _toClassId = v),
-                ),
-              ],
+              if (from != null)
+                switch (plan!.outcome) {
+                  _Outcome.notInLadder => _Note(
+                      from.level == null
+                          ? '${from.name} has no level set. Edit it under '
+                              'Classes before promoting.'
+                          : '${from.name} is not a standard class name '
+                              '(e.g. JSS 1, Class 3), so its next class is '
+                              'unknown. Rename it under Classes to promote it.',
+                      warning: true,
+                    ),
+                  _Outcome.graduate => _Note(
+                      '${from.name} is the final class. Its active students '
+                      'will be marked as graduated.'),
+                  _Outcome.promote when targets.isEmpty => _Note(
+                      'There is no ${plan.next.name} class yet. Add it under '
+                      'Classes first.',
+                      warning: true,
+                    ),
+                  _Outcome.promote => DropdownButtonFormField<String>(
+                      // Re-key per From class so the field never holds a
+                      // value that is missing from its items.
+                      key: ValueKey('to-${from.id}'),
+                      initialValue: toClassId,
+                      decoration: InputDecoration(
+                        labelText: 'To class (${plan.next.name})',
+                      ),
+                      items: targets
+                          .map((c) => DropdownMenuItem(
+                              value: c.id, child: Text(c.name)))
+                          .toList(),
+                      onChanged: (v) => setState(() => _toClassId = v),
+                    ),
+                },
               const SizedBox(height: 12),
               TextField(
                 controller: _year,
@@ -157,7 +241,9 @@ class _PromotionScreenState extends State<PromotionScreen> {
               ],
               const SizedBox(height: 20),
               ElevatedButton(
-                onPressed: _busy ? null : () => _run(classes),
+                onPressed: (_busy || !canRun)
+                    ? null
+                    : () => _run(from!, plan, toClassId),
                 child: _busy
                     ? const SizedBox(
                         height: 18,
@@ -165,12 +251,36 @@ class _PromotionScreenState extends State<PromotionScreen> {
                         child: CircularProgressIndicator(
                             strokeWidth: 2, color: Colors.white),
                       )
-                    : const Text('Run promotion'),
+                    : Text(plan?.outcome == _Outcome.graduate
+                        ? 'Graduate students'
+                        : 'Run promotion'),
               ),
             ],
           );
         },
       ),
+    );
+  }
+}
+
+/// An info or warning line under the From class.
+class _Note extends StatelessWidget {
+  const _Note(this.text, {this.warning = false});
+
+  final String text;
+  final bool warning;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = warning ? AppColors.warning : AppColors.primary;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(warning ? Icons.warning_amber_rounded : Icons.info_outline,
+            color: color, size: 20),
+        const SizedBox(width: 8),
+        Expanded(child: Text(text)),
+      ],
     );
   }
 }

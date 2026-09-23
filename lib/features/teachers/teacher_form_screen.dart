@@ -10,6 +10,7 @@ import '../../services/cloudinary_service.dart';
 import '../../services/teacher_service.dart';
 import '../../state/auth_controller.dart';
 import '../../theme/app_colors.dart';
+import '../../widgets/delete_helpers.dart';
 
 /// Teacher registration — mirrors the Ninka school app's teacher form (NIN,
 /// photo, gender, marital status, DOB, pincode, qualification, experience,
@@ -275,25 +276,20 @@ class _TeacherFormScreenState extends State<TeacherFormScreen> {
   }
 
   Future<void> _confirmDelete() async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete teacher?'),
-        content: Text('${widget.existing!.fullName} will be removed.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel')),
-          TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Delete')),
-        ],
-      ),
+    final teacher = widget.existing!;
+    final ok = await confirmDelete(
+      context,
+      title: 'Delete teacher?',
+      message: '${teacher.fullName} will be removed.',
     );
-    if (ok != true || !mounted) return;
+    if (!ok || !mounted) return;
     final service = TeacherService(context.read<AuthController>().tenant!);
-    await service.delete(widget.existing!.id);
-    if (mounted) Navigator.of(context).pop();
+    final deleted = await runDelete(
+      context,
+      () => service.delete(teacher.id),
+      done: '${teacher.fullName} deleted.',
+    );
+    if (deleted && mounted) Navigator.of(context).pop();
   }
 
   String? _required(String? v) =>

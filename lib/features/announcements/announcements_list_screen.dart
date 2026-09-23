@@ -9,10 +9,23 @@ import '../../models/school_class.dart';
 import '../../services/announcement_service.dart';
 import '../../services/class_service.dart';
 import '../../state/auth_controller.dart';
+import '../../widgets/delete_helpers.dart';
 import '../../widgets/status_views.dart';
 
 class AnnouncementsListScreen extends StatelessWidget {
   const AnnouncementsListScreen({super.key});
+
+  Future<void> _delete(
+      BuildContext context, AnnouncementService service, Announcement a) async {
+    final ok = await confirmDelete(
+      context,
+      title: 'Delete announcement?',
+      message: '"${a.title}" will be removed for everyone.',
+    );
+    if (!ok || !context.mounted) return;
+    await runDelete(context, () => service.delete(a.id),
+        done: 'Announcement deleted.');
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -65,7 +78,8 @@ class AnnouncementsListScreen extends StatelessWidget {
                   trailing: canPost
                       ? IconButton(
                           icon: const Icon(Icons.delete_outline),
-                          onPressed: () => service.delete(a.id),
+                          tooltip: 'Delete announcement',
+                          onPressed: () => _delete(context, service, a),
                         )
                       : null,
                 ),

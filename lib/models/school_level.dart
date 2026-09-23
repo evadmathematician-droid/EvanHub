@@ -33,6 +33,24 @@ enum SchoolLevel {
       standardClasses.last.name.toLowerCase() ==
           className.trim().toLowerCase();
 
+  /// Position of [className] in [standardClasses], or -1 when it is not a
+  /// standard class. Case and spaces are ignored and a section suffix is
+  /// allowed, so "JSS 1", "jss1" and "JSS 1 A" all match JSS 1 (but
+  /// "Class 10" does not match Class 1).
+  int rungOf(String className) {
+    String squash(String s) => s.replaceAll(RegExp(r'\s+'), '').toLowerCase();
+    final name = squash(className);
+    final ladder = standardClasses;
+    for (var i = 0; i < ladder.length; i++) {
+      final std = squash(ladder[i].name);
+      if (name.startsWith(std) &&
+          !name.substring(std.length).startsWith(RegExp(r'\d'))) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
   /// The usual class ladder for this level, in promotion order.
   List<StandardClass> get standardClasses => switch (this) {
         SchoolLevel.prePrimary => const [

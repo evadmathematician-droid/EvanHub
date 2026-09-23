@@ -11,6 +11,7 @@ import '../../models/school_event.dart';
 import '../../services/event_service.dart';
 import '../../state/auth_controller.dart';
 import '../../theme/app_colors.dart';
+import '../../widgets/delete_helpers.dart';
 
 /// "School events" panel for the dashboard: newest posts first, with an Add
 /// button for admins and teachers (the same people the database rules let
@@ -36,22 +37,14 @@ class _SchoolEventsPanelState extends State<SchoolEventsPanel> {
   }
 
   Future<void> _delete(EventService service, SchoolEvent e) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete event?'),
-        content: Text('"${e.title}" will be removed.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel')),
-          TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Delete')),
-        ],
-      ),
+    final ok = await confirmDelete(
+      context,
+      title: 'Delete event?',
+      message: '"${e.title}" will be removed.',
     );
-    if (ok == true) await service.delete(e.id);
+    if (!ok || !mounted) return;
+    await runDelete(context, () => service.delete(e.id),
+        done: 'Event deleted.');
   }
 
   @override
