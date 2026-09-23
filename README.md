@@ -12,7 +12,8 @@ another school's data. Photos and files are uploaded to **Cloudinary**.
 | --- | --- |
 | Authentication (email/password, roles) | functional |
 | School onboarding (new tenant sign-up) | functional |
-| Multi-tenant data layer + database rules | functional |
+| Multi-tenant data layer + database rules | functional - per-branch reads, private student/teacher branches, field validation, unique admission no. / NIN |
+| Parent / student portal | placeholder screen ("coming soon") |
 | Students (photos, exam records, levels/classes) | functional |
 | Teachers (photos, NIN, documents) | functional |
 | Classes + standard class ladders | functional |

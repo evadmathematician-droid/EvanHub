@@ -1,4 +1,17 @@
 {
+  // Evangelist Global - Realtime Database rules (Phase 1).
+  //
+  // Access is decided by schools/{sid}/members/{uid}.role:
+  //   schoolAdmin | teacher | parentStudent
+  // There is NO read rule on schools/{sid} itself: each branch grants its own
+  // reads, because a read granted on a parent can never be revoked below it.
+  // Writes are allowed only on single records (e.g. students/{id}), never on a
+  // whole list. See docs/MULTI_TENANCY.md.
+  //
+  // Index keys: index/admissionNo/{key} where key = admissionNo lower-cased,
+  // with % . # $ [ ] / replaced by %25 %2e %23 %24 %5b %5d %2f (the app's
+  // indexKey() does the same). index/nin/{nin} uses the NIN as-is.
+
   "rules": {
     ".read": false,
     ".write": false,
@@ -6,55 +19,284 @@
     "users": {
       "$uid": {
         ".read": "auth != null && auth.uid === $uid",
-        ".write": "auth != null && auth.uid === $uid"
+        ".write": "auth != null && auth.uid === $uid",
+        "schoolId": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 40" },
+        "role": { ".validate": "newData.isString() && (newData.val() === 'schoolAdmin' || newData.val() === 'teacher' || newData.val() === 'parentStudent' || newData.val() === 'superAdmin')" },
+        "email": { ".validate": "newData.isString() && newData.val().length <= 120" },
+        "displayName": { ".validate": "newData.isString() && newData.val().length <= 100" },
+        "createdAt": { ".validate": "newData.isNumber()" },
+        "updatedAt": { ".validate": "newData.isNumber()" },
+        "$other": { ".validate": false }
       }
     },
 
     "schools": {
       "$sid": {
-        ".read": "auth != null && root.child('schools').child($sid).child('members').child(auth.uid).exists()",
-
-        ".write": "auth != null && !data.exists() && newData.child('ownerUid').val() === auth.uid && newData.child('members').child(auth.uid).child('role').val() === 'schoolAdmin'",
+        // Creating a brand-new school (onboarding). The creator must be the
+        // owner and the ONLY member, as schoolAdmin. After creation this rule
+        // never matches again (data exists), so the school can't be replaced.
+        ".write": "auth != null && !data.exists() && newData.child('ownerUid').val() === auth.uid && newData.hasChildren(['ownerUid', 'createdAt', 'profile', 'subscription', 'members']) && newData.child('members').numChildren() === 1 && newData.child('members').child(auth.uid).child('role').val() === 'schoolAdmin'",
 
         "ownerUid": {
-          ".validate": "!data.exists() || newData.val() === data.val()"
+          ".read": "auth != null && root.child('schools').child($sid).child('members').child(auth.uid).exists()",
+          ".validate": "newData.isString() && newData.val() === auth.uid"
         },
 
-        "meta": {
-          ".write": "auth != null && root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin'"
+        "createdAt": {
+          ".read": "auth != null && root.child('schools').child($sid).child('members').child(auth.uid).exists()",
+          ".validate": "newData.isNumber() && newData.val() === now"
         },
 
-        "updatedAt": {
-          ".write": "auth != null && root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin'"
+        "profile": {
+          ".read": "auth != null && root.child('schools').child($sid).child('members').child(auth.uid).exists()",
+          ".write": "auth != null && root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin'",
+          ".validate": "newData.hasChildren(['name'])",
+          "name": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 120" },
+          "logoUrl": { ".validate": "newData.isString() && newData.val().length <= 500 && (newData.val() === '' || newData.val().beginsWith('https://'))" },
+          "coverUrl": { ".validate": "newData.isString() && newData.val().length <= 500 && (newData.val() === '' || newData.val().beginsWith('https://'))" },
+          "address": { ".validate": "newData.isString() && newData.val().length <= 300" },
+          "phone": { ".validate": "newData.isString() && newData.val().length <= 40" },
+          "email": { ".validate": "newData.isString() && newData.val().length <= 120" },
+          "updatedAt": { ".validate": "newData.isNumber() && newData.val() <= now" },
+          "$other": { ".validate": false }
+        },
+
+        // No client writes after creation; at creation only a free trial.
+        "subscription": {
+          ".read": "auth != null && root.child('schools').child($sid).child('members').child(auth.uid).exists()",
+          ".validate": "newData.hasChildren(['plan', 'status']) && newData.child('plan').val() === 'free' && newData.child('status').val() === 'trialing'",
+          "plan": { ".validate": "newData.isString()" },
+          "status": { ".validate": "newData.isString()" },
+          "trialEndsAt": { ".validate": "newData.isNumber()" },
+          "$other": { ".validate": false }
         },
 
         "members": {
-          ".write": "auth != null && root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin'"
-        },
-
-        "teachers": {
-          ".write": "auth != null && root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin'"
-        },
-
-        "promotions": {
-          ".write": "auth != null && root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin'"
+          ".read": "auth != null && root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin'",
+          "$uid": {
+            ".read": "auth != null && auth.uid === $uid",
+            // Admins manage members, but the owner can't be removed or demoted.
+            ".write": "auth != null && root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin' && ($uid !== root.child('schools').child($sid).child('ownerUid').val() || newData.child('role').val() === 'schoolAdmin')",
+            ".validate": "newData.hasChildren(['role'])",
+            "role": { ".validate": "newData.isString() && (newData.val() === 'schoolAdmin' || newData.val() === 'teacher' || newData.val() === 'parentStudent')" },
+            "displayName": { ".validate": "newData.isString() && newData.val().length <= 100" },
+            "email": { ".validate": "newData.isString() && newData.val().length <= 120" },
+            "addedBy": { ".validate": "newData.isString() && (newData.val() === data.val() || newData.val() === auth.uid)" },
+            "addedAt": { ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === now) || newData.val() === data.val())" },
+            "$other": { ".validate": false }
+          }
         },
 
         "classes": {
-          ".write": "auth != null && (root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin' || root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'teacher')"
+          ".read": "auth != null && root.child('schools').child($sid).child('members').child(auth.uid).exists()",
+          "$classId": {
+            // Admin + teacher create/edit; only an admin deletes.
+            ".write": "auth != null && (root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin' || (root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'teacher' && newData.exists()))",
+            ".validate": "newData.hasChildren(['name', 'level', 'createdAt'])",
+            "name": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 60" },
+            "level": { ".validate": "newData.isString() && (newData.val() === 'pre_primary' || newData.val() === 'primary' || newData.val() === 'secondary')" },
+            "stage": { ".validate": "newData.isString() && newData.parent().child('level').val() === 'secondary' && (newData.val() === 'junior' || newData.val() === 'senior')" },
+            "academicYear": { ".validate": "newData.isString() && newData.val().length <= 20" },
+            "classTeacherId": { ".validate": "newData.isString() && newData.val().length <= 40" },
+            "createdAt": { ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === now) || newData.val() === data.val())" },
+            "$other": { ".validate": false }
+          }
         },
-        "students": {
-          ".write": "auth != null && (root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin' || root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'teacher')"
-        },
-        "documents": {
-          ".write": "auth != null && (root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin' || root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'teacher')"
-        },
+
         "events": {
-          ".write": "auth != null && (root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin' || root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'teacher')"
+          ".read": "auth != null && root.child('schools').child($sid).child('members').child(auth.uid).exists()",
+          "$eventId": {
+            // Admin + teacher create; the author or an admin edits/deletes.
+            ".write": "auth != null && (root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin' || (root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'teacher' && (!data.exists() || data.child('authorUid').val() === auth.uid)))",
+            ".validate": "newData.hasChildren(['title', 'authorUid', 'createdAt'])",
+            "title": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 120" },
+            "text": { ".validate": "newData.isString() && newData.val().length <= 5000" },
+            "imageUrl": { ".validate": "newData.isString() && newData.val().length <= 500 && (newData.val() === '' || newData.val().beginsWith('https://'))" },
+            "authorUid": { ".validate": "newData.isString() && ((!data.exists() && newData.val() === auth.uid) || newData.val() === data.val())" },
+            "createdAt": { ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === now) || newData.val() === data.val())" },
+            "$other": { ".validate": false }
+          }
         },
+
         "announcements": {
-          ".write": "auth != null && (root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin' || root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'teacher')"
-        }
+          ".read": "auth != null && root.child('schools').child($sid).child('members').child(auth.uid).exists()",
+          "$announcementId": {
+            ".write": "auth != null && (root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin' || (root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'teacher' && (!data.exists() || data.child('authorUid').val() === auth.uid)))",
+            ".validate": "newData.hasChildren(['title', 'body', 'audience', 'authorUid', 'createdAt'])",
+            "title": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 120" },
+            "body": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 5000" },
+            "audience": { ".validate": "newData.isString() && newData.val().length <= 40 && (newData.val() === 'school' || newData.parent().parent().parent().child('classes').child(newData.val()).exists())" },
+            "authorUid": { ".validate": "newData.isString() && ((!data.exists() && newData.val() === auth.uid) || newData.val() === data.val())" },
+            "createdAt": { ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === now) || newData.val() === data.val())" },
+            "$other": { ".validate": false }
+          }
+        },
+
+        "documents": {
+          ".read": "auth != null && root.child('schools').child($sid).child('members').child(auth.uid).exists()",
+          "$docId": {
+            // Admin + teacher upload; the uploader or an admin edits/deletes.
+            ".write": "auth != null && (root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin' || (root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'teacher' && (!data.exists() || data.child('uploadedBy').val() === auth.uid)))",
+            ".validate": "newData.hasChildren(['title', 'downloadUrl', 'uploadedBy', 'uploadedAt'])",
+            "title": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 120" },
+            "category": { ".validate": "newData.isString() && newData.val().length <= 40" },
+            "storagePath": { ".validate": "newData.isString() && newData.val().length <= 300" },
+            "downloadUrl": { ".validate": "newData.isString() && newData.val().length <= 500 && newData.val().beginsWith('https://')" },
+            "sizeBytes": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+            "uploadedBy": { ".validate": "newData.isString() && ((!data.exists() && newData.val() === auth.uid) || newData.val() === data.val())" },
+            "uploadedAt": { ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === now) || newData.val() === data.val())" },
+            "$other": { ".validate": false }
+          }
+        },
+
+        "students": {
+          ".read": "auth != null && (root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin' || root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'teacher')",
+          "$studentId": {
+            // Admin + teacher create/edit. Only an admin deletes, and the
+            // private record and index entry must be removed in the same update.
+            ".write": "auth != null && ((root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'teacher' && newData.exists()) || (root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin' && (newData.exists() || (!newData.parent().parent().child('studentPrivate').child($studentId).exists() && newData.parent().parent().child('index').child('admissionNo').child(data.child('admissionNo').val().toLowerCase().replace('%', '%25').replace('.', '%2e').replace('#', '%23').replace('$', '%24').replace('[', '%5b').replace(']', '%5d').replace('/', '%2f')).val() !== $studentId))))",
+            // The record must be indexed under its admission number, and when
+            // the number changes the old index entry must be released.
+            ".validate": "newData.hasChildren(['firstName', 'lastName', 'admissionNo', 'status', 'createdAt']) && newData.parent().parent().child('index').child('admissionNo').child(newData.child('admissionNo').val().toLowerCase().replace('%', '%25').replace('.', '%2e').replace('#', '%23').replace('$', '%24').replace('[', '%5b').replace(']', '%5d').replace('/', '%2f')).val() === $studentId && (!data.exists() || data.child('admissionNo').val().toLowerCase() === newData.child('admissionNo').val().toLowerCase() || newData.parent().parent().child('index').child('admissionNo').child(data.child('admissionNo').val().toLowerCase().replace('%', '%25').replace('.', '%2e').replace('#', '%23').replace('$', '%24').replace('[', '%5b').replace(']', '%5d').replace('/', '%2f')).val() !== $studentId)",
+            "firstName": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 60" },
+            "middleName": { ".validate": "newData.isString() && newData.val().length <= 60" },
+            "lastName": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 60" },
+            "gender": { ".validate": "newData.isString() && (newData.val() === '' || newData.val() === 'Male' || newData.val() === 'Female')" },
+            "level": { ".validate": "newData.isString() && (newData.val() === 'pre_primary' || newData.val() === 'primary' || newData.val() === 'secondary')" },
+            "classId": { ".validate": "newData.isString() && newData.val().length <= 40 && (newData.val() === '' || newData.parent().parent().parent().child('classes').child(newData.val()).exists())" },
+            "department": { ".validate": "newData.isString() && (newData.val() === 'Science' || newData.val() === 'Commercial' || newData.val() === 'Arts')" },
+            "admissionNo": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 30 && newData.val().matches(/^[^ ](.*[^ ])?$/)" },
+            "admissionYear": { ".validate": "newData.isString() && (newData.val() === '' || newData.val().matches(/^[0-9]{4}$/))" },
+            "status": { ".validate": "newData.isString() && (newData.val() === 'active' || newData.val() === 'graduated' || newData.val() === 'inactive' || newData.val() === 'transferred')" },
+            "photoUrl": { ".validate": "newData.isString() && newData.val().length <= 500 && (newData.val() === '' || newData.val().beginsWith('https://'))" },
+            "createdAt": { ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === now) || newData.val() === data.val())" },
+            "$other": { ".validate": false }
+          }
+        },
+
+        "studentPrivate": {
+          ".read": "auth != null && (root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin' || root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'teacher')",
+          "$studentId": {
+            ".write": "auth != null && (root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin' || (root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'teacher' && newData.exists()))",
+            ".validate": "newData.parent().parent().child('students').child($studentId).exists()",
+            "dob": { ".validate": "newData.isNumber()" },
+            "address": { ".validate": "newData.isString() && newData.val().length <= 300" },
+            "guardianName": { ".validate": "newData.isString() && newData.val().length <= 100" },
+            "guardianPhone": { ".validate": "newData.isString() && newData.val().length <= 40" },
+            "npseId": { ".validate": "newData.isString() && newData.val().length <= 20" },
+            "npseYear": { ".validate": "newData.isString() && (newData.val() === '' || newData.val().matches(/^[0-9]{4}$/))" },
+            "beceId": { ".validate": "newData.isString() && newData.val().length <= 20" },
+            "beceYear": { ".validate": "newData.isString() && (newData.val() === '' || newData.val().matches(/^[0-9]{4}$/))" },
+            "wassceId": { ".validate": "newData.isString() && newData.val().length <= 20" },
+            "wassceYear": { ".validate": "newData.isString() && (newData.val() === '' || newData.val().matches(/^[0-9]{4}$/))" },
+            "$other": { ".validate": false }
+          }
+        },
+
+        "teachers": {
+          ".read": "auth != null && (root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin' || root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'teacher')",
+          "$teacherId": {
+            // Admin only. Deleting requires the private record to go too.
+            ".write": "auth != null && root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin' && (newData.exists() || !newData.parent().parent().child('teacherPrivate').child($teacherId).exists())",
+            ".validate": "newData.hasChildren(['firstName', 'lastName', 'status', 'createdAt'])",
+            "firstName": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 60" },
+            "lastName": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 60" },
+            "gender": { ".validate": "newData.isString() && (newData.val() === '' || newData.val() === 'Male' || newData.val() === 'Female')" },
+            "subjects": {
+              "$i": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 60" }
+            },
+            "level": { ".validate": "newData.isString() && (newData.val() === '' || newData.val() === 'JSS' || newData.val() === 'SSS' || newData.val() === 'BOTH')" },
+            "stream": { ".validate": "newData.isString() && (newData.val() === '' || newData.val() === 'Science' || newData.val() === 'Commercial' || newData.val() === 'Arts')" },
+            "employmentType": { ".validate": "newData.isString() && (newData.val() === 'full_time' || newData.val() === 'part_time' || newData.val() === 'contract')" },
+            "status": { ".validate": "newData.isString() && (newData.val() === 'active' || newData.val() === 'inactive')" },
+            "photoUrl": { ".validate": "newData.isString() && newData.val().length <= 500 && (newData.val() === '' || newData.val().beginsWith('https://'))" },
+            "linkedUid": { ".validate": "newData.isString() && newData.val().length <= 128" },
+            "createdAt": { ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === now) || newData.val() === data.val())" },
+            "$other": { ".validate": false }
+          }
+        },
+
+        "teacherPrivate": {
+          ".read": "auth != null && root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin'",
+          "$teacherId": {
+            // Admin only. Deleting requires the NIN index entry to go too.
+            ".write": "auth != null && root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin' && (newData.exists() || data.child('nin').val() === '' || newData.parent().parent().child('index').child('nin').child(data.child('nin').val()).val() !== $teacherId)",
+            // A non-empty NIN must be indexed to this teacher; a changed NIN
+            // must release the old index entry.
+            ".validate": "newData.parent().parent().child('teachers').child($teacherId).exists() && newData.hasChildren(['nin']) && (newData.child('nin').val() === '' || newData.parent().parent().child('index').child('nin').child(newData.child('nin').val()).val() === $teacherId) && (!data.exists() || data.child('nin').val() === '' || data.child('nin').val() === newData.child('nin').val() || newData.parent().parent().child('index').child('nin').child(data.child('nin').val()).val() !== $teacherId)",
+            "nin": { ".validate": "newData.isString() && (newData.val() === '' || newData.val().matches(/^[A-HJ-NP-Z0-9]{8}$/))" },
+            "isPincoded": { ".validate": "newData.isBoolean()" },
+            "pincode": { ".validate": "newData.isString() && (newData.val() === '' || newData.val().matches(/^[0-9]{6}$/))" },
+            "maritalStatus": { ".validate": "newData.isString() && (newData.val() === '' || newData.val() === 'Single' || newData.val() === 'Married')" },
+            "dob": { ".validate": "newData.isNumber()" },
+            "email": { ".validate": "newData.isString() && newData.val().length <= 120" },
+            "phone": { ".validate": "newData.isString() && newData.val().length <= 40" },
+            "address": { ".validate": "newData.isString() && newData.val().length <= 300" },
+            "qualification": { ".validate": "newData.isString() && newData.val().length <= 200" },
+            "experience": { ".validate": "newData.isString() && newData.val().length <= 200" },
+            "documents": {
+              "$i": {
+                ".validate": "newData.hasChildren(['title', 'url'])",
+                "title": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 120" },
+                "url": { ".validate": "newData.isString() && newData.val().length <= 500 && newData.val().beginsWith('https://')" },
+                "fileName": { ".validate": "newData.isString() && newData.val().length <= 200" },
+                "sizeBytes": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+                "$other": { ".validate": false }
+              }
+            },
+            "$other": { ".validate": false }
+          }
+        },
+
+        "promotions": {
+          ".read": "auth != null && root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin'",
+          "$promotionId": {
+            // Admin only, append-only audit trail: no edits, no deletes.
+            ".write": "auth != null && root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin' && !data.exists()",
+            ".validate": "newData.hasChildren(['studentId', 'fromClassId', 'academicYear', 'promotedBy', 'promotedAt'])",
+            "studentId": { ".validate": "newData.isString() && newData.parent().parent().parent().child('students').child(newData.val()).exists()" },
+            "fromClassId": { ".validate": "newData.isString() && newData.val().length <= 40" },
+            "toClassId": { ".validate": "newData.isString() && newData.parent().parent().parent().child('classes').child(newData.val()).exists()" },
+            "academicYear": { ".validate": "newData.isString() && newData.val().length <= 20" },
+            "promotedBy": { ".validate": "newData.isString() && newData.val() === auth.uid" },
+            "promotedAt": { ".validate": "newData.isNumber() && newData.val() === now" },
+            "$other": { ".validate": false }
+          }
+        },
+
+        "index": {
+          "admissionNo": {
+            ".read": "auth != null && (root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin' || root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'teacher')",
+            "$key": {
+              // Claim a free key (or re-save the same owner). Release a key only
+              // when its student is deleted or no longer uses that number.
+              ".write": "auth != null && (root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin' || root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'teacher') && ((newData.exists() && (!data.exists() || data.val() === newData.val())) || (!newData.exists() && (!newData.parent().parent().parent().child('students').child(data.val()).exists() || newData.parent().parent().parent().child('students').child(data.val()).child('admissionNo').val().toLowerCase().replace('%', '%25').replace('.', '%2e').replace('#', '%23').replace('$', '%24').replace('[', '%5b').replace(']', '%5d').replace('/', '%2f') !== $key)))",
+              ".validate": "newData.isString() && newData.parent().parent().parent().child('students').child(newData.val()).exists() && newData.parent().parent().parent().child('students').child(newData.val()).child('admissionNo').val().toLowerCase().replace('%', '%25').replace('.', '%2e').replace('#', '%23').replace('$', '%24').replace('[', '%5b').replace(']', '%5d').replace('/', '%2f') === $key"
+            }
+          },
+          "nin": {
+            ".read": "auth != null && root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin'",
+            "$nin": {
+              ".write": "auth != null && root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin' && ((newData.exists() && (!data.exists() || data.val() === newData.val())) || (!newData.exists() && newData.parent().parent().parent().child('teacherPrivate').child(data.val()).child('nin').val() !== $nin))",
+              ".validate": "$nin.matches(/^[A-HJ-NP-Z0-9]{8}$/) && newData.isString() && newData.parent().parent().parent().child('teacherPrivate').child(newData.val()).child('nin').val() === $nin"
+            }
+          }
+        },
+
+        // ---- TEMPORARY (Phase 1 migration) --------------------------------
+        // Lets a school admin read the old "meta" node and delete it and the
+        // old top-level "updatedAt" while moving to "profile". Remove this
+        // block once every school has been migrated.
+        "meta": {
+          ".read": "auth != null && root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin'",
+          ".write": "auth != null && root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin' && !newData.exists()"
+        },
+        "updatedAt": {
+          ".write": "auth != null && root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin' && !newData.exists()"
+        },
+        // ---- END TEMPORARY -------------------------------------------------
+
+        "$other": { ".validate": false }
       }
     }
   }

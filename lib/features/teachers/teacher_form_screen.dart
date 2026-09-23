@@ -56,7 +56,13 @@ class _TeacherFormScreenState extends State<TeacherFormScreen> {
   bool _docBusy = false;
   String? _error;
 
+  /// The existing teacher with the private half (NIN, contacts, documents)
+  /// loaded; null while loading. Saving and deleting wait for it so private
+  /// data is never wiped and the old NIN index entry can be released.
+  Teacher? _loaded;
+
   bool get _isEdit => widget.existing != null;
+  bool get _privateLoaded => !_isEdit || _loaded != null;
   bool get _teachesSenior => _level == 'SSS' || _level == 'BOTH';
 
   @override
@@ -83,6 +89,36 @@ class _TeacherFormScreenState extends State<TeacherFormScreen> {
     _employmentType = t?.employmentType ?? 'full_time';
     _photoUrl = t?.photoUrl ?? '';
     _documents = [...?t?.documents];
+    if (t != null) _loadPrivate(t);
+  }
+
+  Future<void> _loadPrivate(Teacher t) async {
+    try {
+      final full = await TeacherService(context.read<AuthController>().tenant!)
+          .loadPrivate(t);
+      if (!mounted) return;
+      setState(() {
+        _loaded = full;
+        _nin.text = full.nin;
+        _email.text = full.email;
+        _phone.text = full.phone;
+        _address.text = full.address;
+        _pincode.text = full.pincode;
+        _qualification.text = full.qualification;
+        _experience.text = full.experience;
+        _dob = full.dob;
+        _dobText.text = _formatDate(full.dob);
+        _maritalStatus = full.maritalStatus;
+        _isPincoded = full.isPincoded;
+        _documents = [...full.documents];
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() => _error =
+            'Could not load this teacher\'s private details, so saving is '
+            'disabled. Go back and open the teacher again.');
+      }
+    }
   }
 
   @override
@@ -213,6 +249,7 @@ class _TeacherFormScreenState extends State<TeacherFormScreen> {
   }
 
   Future<void> _save() async {
+    if (!_privateLoaded) return;
     if (!_formKey.currentState!.validate()) return;
     if (_level.isEmpty) {
       setState(() => _error = 'Choose the level this teacher teaches.');
@@ -235,7 +272,7 @@ class _TeacherFormScreenState extends State<TeacherFormScreen> {
       }
 
       final base =
-          widget.existing ?? const Teacher(id: '', firstName: '', lastName: '');
+          _loaded ?? const Teacher(id: '', firstName: '', lastName: '');
       final teacher = base.copyWith(
         nin: nin,
         firstName: _firstName.text.trim(),
@@ -262,21 +299,19 @@ class _TeacherFormScreenState extends State<TeacherFormScreen> {
             .where((s) => s.isNotEmpty)
             .toList(),
       );
-      if (_isEdit) {
-        await service.update(teacher);
-      } else {
-        await service.add(teacher);
-      }
+      await service.save(teacher, previousNin: _loaded?.nin);
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
-      setState(() => _error = 'Save failed: $e');
+      if (mounted) setState(() => _error = saveErrorMessage(e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
   Future<void> _confirmDelete() async {
-    final teacher = widget.existing!;
+    // The loaded copy carries the NIN, whose index entry is removed too.
+    final teacher = _loaded;
+    if (teacher == null) return;
     final ok = await confirmDelete(
       context,
       title: 'Delete teacher?',
@@ -286,7 +321,7 @@ class _TeacherFormScreenState extends State<TeacherFormScreen> {
     final service = TeacherService(context.read<AuthController>().tenant!);
     final deleted = await runDelete(
       context,
-      () => service.delete(teacher.id),
+      () => service.delete(teacher),
       done: '${teacher.fullName} deleted.',
     );
     if (deleted && mounted) Navigator.of(context).pop();
@@ -325,10 +360,17 @@ class _TeacherFormScreenState extends State<TeacherFormScreen> {
         actions: [
           if (_isEdit)
             IconButton(
-              onPressed: _busy ? null : _confirmDelete,
+              tooltip: 'Delete teacher',
+              onPressed: (_busy || !_privateLoaded) ? null : _confirmDelete,
               icon: const Icon(Icons.delete_outline),
             ),
         ],
+        bottom: _privateLoaded
+            ? null
+            : const PreferredSize(
+                preferredSize: Size.fromHeight(4),
+                child: LinearProgressIndicator(),
+              ),
       ),
       body: Form(
         key: _formKey,
@@ -382,13 +424,17 @@ class _TeacherFormScreenState extends State<TeacherFormScreen> {
             const SizedBox(height: 12),
             TextFormField(
               controller: _firstName,
-              decoration: const InputDecoration(labelText: 'First name *'),
+              maxLength: 60,
+              decoration: const InputDecoration(
+                  labelText: 'First name *', counterText: ''),
               validator: _required,
             ),
             const SizedBox(height: 12),
             TextFormField(
               controller: _lastName,
-              decoration: const InputDecoration(labelText: 'Last name *'),
+              maxLength: 60,
+              decoration: const InputDecoration(
+                  labelText: 'Last name *', counterText: ''),
               validator: _required,
             ),
             const SizedBox(height: 16),
@@ -411,18 +457,24 @@ class _TeacherFormScreenState extends State<TeacherFormScreen> {
             TextFormField(
               controller: _email,
               keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(labelText: 'Email'),
+              maxLength: 120,
+              decoration:
+                  const InputDecoration(labelText: 'Email', counterText: ''),
             ),
             const SizedBox(height: 12),
             TextFormField(
               controller: _phone,
               keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(labelText: 'Phone'),
+              maxLength: 40,
+              decoration:
+                  const InputDecoration(labelText: 'Phone', counterText: ''),
             ),
             const SizedBox(height: 12),
             TextFormField(
               controller: _address,
-              decoration: const InputDecoration(labelText: 'Address'),
+              maxLength: 300,
+              decoration:
+                  const InputDecoration(labelText: 'Address', counterText: ''),
             ),
             const SizedBox(height: 16),
             _choice('Pincode teacher?', const ['Yes', 'No'],
@@ -449,13 +501,16 @@ class _TeacherFormScreenState extends State<TeacherFormScreen> {
             const SizedBox(height: 12),
             TextFormField(
               controller: _qualification,
-              decoration: const InputDecoration(labelText: 'Qualification'),
+              maxLength: 200,
+              decoration: const InputDecoration(
+                  labelText: 'Qualification', counterText: ''),
             ),
             const SizedBox(height: 12),
             TextFormField(
               controller: _experience,
-              decoration:
-                  const InputDecoration(labelText: 'Teaching experience'),
+              maxLength: 200,
+              decoration: const InputDecoration(
+                  labelText: 'Teaching experience', counterText: ''),
             ),
             const SizedBox(height: 12),
             TextFormField(
@@ -531,7 +586,9 @@ class _TeacherFormScreenState extends State<TeacherFormScreen> {
             ],
             const SizedBox(height: 20),
             ElevatedButton(
-              onPressed: (_busy || _photoBusy || _docBusy) ? null : _save,
+              onPressed: (_busy || _photoBusy || _docBusy || !_privateLoaded)
+                  ? null
+                  : _save,
               child: Text(_isEdit ? 'Save changes' : 'Save teacher'),
             ),
           ],

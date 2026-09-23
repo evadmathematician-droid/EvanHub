@@ -130,7 +130,9 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
             leading: const Icon(Icons.description_outlined),
             title: Text(d.title),
             subtitle: Text('${d.category}  •  ${_size(d.sizeBytes)}'),
-            trailing: canUpload
+            // The uploader or an admin may delete (database rules).
+            trailing: canUpload &&
+                    (auth.isAdmin || d.uploadedBy == auth.appUser?.uid)
                 ? IconButton(
                     icon: const Icon(Icons.delete_outline),
                     tooltip: 'Delete document',

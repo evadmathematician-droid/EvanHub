@@ -1,6 +1,7 @@
 import '../core/rtdb.dart';
 
-/// School identity block — stored as the `meta` map on `schools/{schoolId}`.
+/// School identity block — stored at `schools/{schoolId}/profile` (it lived at
+/// `meta` before Phase 1). Readable by every member; admins write it.
 class SchoolMeta {
   final String name;
 
@@ -85,31 +86,17 @@ class Subscription {
       };
 }
 
-/// The `schools/{schoolId}` document.
+/// A school as the app shows it: its `profile` and `subscription`. The school
+/// node itself isn't readable as a whole, so these are loaded separately
+/// (see `SchoolService.streamSchool`).
 class School {
   final String id;
-  final String ownerUid;
   final SchoolMeta meta;
   final Subscription subscription;
-  final DateTime? createdAt;
 
   const School({
     required this.id,
-    required this.ownerUid,
     required this.meta,
     this.subscription = const Subscription(),
-    this.createdAt,
   });
-
-  factory School.fromMap(String id, Map<String, dynamic> data) {
-    return School(
-      id: id,
-      ownerUid: (data['ownerUid'] ?? '') as String,
-      meta: SchoolMeta.fromMap(
-          (data['meta'] as Map<String, dynamic>?) ?? const {}),
-      subscription: Subscription.fromMap(
-          (data['subscription'] as Map<String, dynamic>?) ?? const {}),
-      createdAt: fromMillis(data['createdAt']),
-    );
-  }
 }

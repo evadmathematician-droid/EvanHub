@@ -4,6 +4,9 @@ import 'package:go_router/go_router.dart';
 
 import '../features/announcements/announcement_form_screen.dart';
 import '../features/announcements/announcements_list_screen.dart';
+import '../features/access/no_access_screen.dart';
+import '../features/access/parent_portal_screen.dart';
+import '../features/access/upgrade_screen.dart';
 import '../features/auth/login_screen.dart';
 import '../features/auth/splash_screen.dart';
 import '../features/classes/class_form_screen.dart';
@@ -36,22 +39,35 @@ GoRouter buildRouter(AuthController auth) {
     ],
     redirect: (context, state) {
       final loc = state.matchedLocation;
-      final inAuthArea = loc == Routes.login ||
-          loc == Routes.onboarding ||
-          loc == Routes.splash;
+      // Screens shown instead of the app proper.
+      const gates = {
+        Routes.splash,
+        Routes.login,
+        Routes.onboarding,
+        Routes.noAccess,
+        Routes.upgrade,
+        Routes.parentPortal,
+      };
+      String? only(String route) => loc == route ? null : route;
 
       switch (auth.status) {
         case AuthStatus.unknown:
-          return loc == Routes.splash ? null : Routes.splash;
+          return only(Routes.splash);
         case AuthStatus.signedOut:
           // Onboarding starts before an account exists, so allow it too.
           return (loc == Routes.login || loc == Routes.onboarding)
               ? null
               : Routes.login;
         case AuthStatus.needsOnboarding:
-          return loc == Routes.onboarding ? null : Routes.onboarding;
+          return only(Routes.onboarding);
+        case AuthStatus.noAccess:
+          return only(Routes.noAccess);
+        case AuthStatus.upgradeRequired:
+          return only(Routes.upgrade);
+        case AuthStatus.parentPortal:
+          return only(Routes.parentPortal);
         case AuthStatus.ready:
-          return inAuthArea ? Routes.dashboard : null;
+          return gates.contains(loc) ? Routes.dashboard : null;
       }
     },
     routes: [
@@ -66,6 +82,18 @@ GoRouter buildRouter(AuthController auth) {
       GoRoute(
         path: Routes.onboarding,
         builder: (_, _) => const SchoolOnboardingScreen(),
+      ),
+      GoRoute(
+        path: Routes.noAccess,
+        builder: (_, _) => const NoAccessScreen(),
+      ),
+      GoRoute(
+        path: Routes.upgrade,
+        builder: (_, _) => const UpgradeScreen(),
+      ),
+      GoRoute(
+        path: Routes.parentPortal,
+        builder: (_, _) => const ParentPortalScreen(),
       ),
 
       // --- Forms / secondary screens (rendered above the bottom-nav shell) ---

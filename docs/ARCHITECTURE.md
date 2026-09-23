@@ -30,6 +30,11 @@ demand from `context.read<AuthController>().tenant!`.
 - **Atomic changes** use multi-path `update()` calls:
   - onboarding writes `schools/{id}` and `users/{uid}` together
     (`SchoolService.createSchool`);
+  - saving or deleting a student or teacher writes the public record, the
+    private record and the index entry together (`StudentService.save` /
+    `delete`, `TeacherService.save` / `delete`);
+  - the one-time Phase 1 migration moves a whole school in one update
+    (`MigrationService.run`);
   - promotion moves students and writes audit records together
     (`PromotionService.promoteClass`);
   - deleting a class removes it and clears `classId` on its students together
@@ -48,8 +53,9 @@ demand from `context.read<AuthController>().tenant!`.
   change.
 - `redirect` maps `AuthController.status` to a location:
   `unknown -> /splash`, `signedOut -> /login` (`/onboarding` also allowed),
-  `needsOnboarding -> /onboarding`, `ready -> /dashboard` (when in the auth
-  area).
+  `needsOnboarding -> /onboarding`, `noAccess -> /no-access`,
+  `upgradeRequired -> /upgrade`, `parentPortal -> /parent`,
+  `ready -> /dashboard` (when on any of those gate screens).
 - The signed-in area is a `StatefulShellRoute.indexedStack` with four branches
   (Dashboard, Students, Teachers, More). Forms and detail screens are top-level
   routes rendered above the shell.
@@ -62,14 +68,26 @@ demand from `context.read<AuthController>().tenant!`.
         null --------+-------- User
          |                      |
      signedOut         listen users/{uid}
-                          |            |
-             no schoolId  |            |  schoolId present
-                  needsOnboarding    ready
+                          |              |
+             no schoolId  |              |  schoolId present
+                  needsOnboarding   listen schools/{sid}/members/{uid}
+                                         |
+                    missing -------------+------------- present (role)
+                       |                                     |
+                    noAccess             parentStudent? -> parentPortal
+                                         profile missing? -> upgradeRequired
+                                         otherwise        -> ready
 ```
+
+The role comes **only** from `members/{uid}`, the same record the database
+rules check. The member entry is watched live, so a role change or removal
+takes effect immediately. `recheckSchool()` re-runs the last step (used after
+the migration).
 
 `onboardNewSchool()` registers the admin account and calls
 `SchoolService.createSchool`. The `users/{uid}` write in that multi-path update
-flips the listener to `ready`, and the router redirects to the dashboard.
+starts the chain above, which ends in `ready`, and the router redirects to the
+dashboard.
 
 ## Roles in the UI
 
@@ -78,11 +96,21 @@ flips the listener to `ready`, and the router redirects to the dashboard.
 - `canManageSchool` (schoolAdmin, superAdmin): teachers, school profile.
 - `canManageStudents` (schoolAdmin, superAdmin, teacher): students, classes,
   documents, announcements, events.
-- Class promotion: `schoolAdmin` only, matching the database rules.
+- `AuthController.isAdmin` (schoolAdmin): class promotion, deleting students
+  and classes, deleting other people's documents / events / announcements.
+- Authors (`authorUid` / `uploadedBy`) may delete their own posts and uploads.
 
-The UI reads the role from `users/{uid}`; the database rules use
-`schools/{sid}/members/{uid}`. Hiding a button is only a convenience - the rules
-are what actually enforce access.
+The role comes from `schools/{sid}/members/{uid}`, like the database rules.
+Hiding a button is only a convenience - the rules are what actually enforce
+access.
+
+## Public and private records
+
+Students and teachers are stored as a public record plus a private record with
+the same id (`students` / `studentPrivate`, `teachers` / `teacherPrivate`).
+Lists load only the public half. The edit forms load the private half with
+`loadPrivate()` and keep **Save** and **Delete** disabled until it has
+arrived, so a half-loaded form can never overwrite private data.
 
 ## Shared UI helpers
 

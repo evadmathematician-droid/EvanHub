@@ -7,6 +7,7 @@ class StudentService {
 
   final TenantRefs _refs;
 
+  /// Public halves only, sorted by last name.
   Stream<List<Student>> watchAll() {
     return watchList(_refs.students, Student.fromMap).map(
       (list) => list..sort((a, b) => compareText(a.lastName, b.lastName)),
@@ -19,29 +20,48 @@ class StudentService {
     );
   }
 
-  /// True when another student already uses [admissionNo] (case-insensitive).
+  /// [student] with its `studentPrivate` half loaded.
+  Future<Student> loadPrivate(Student student) async {
+    final snapshot = await _refs.studentPrivate.child(student.id).get();
+    return student.withPrivate(asMap(snapshot.value));
+  }
+
+  /// True when another student already holds [admissionNo] (case-insensitive).
   /// Pass [excludeId] when editing so a student doesn't clash with themselves.
+  /// The database rules enforce this too; this check gives a friendly message.
   Future<bool> admissionNoTaken(String admissionNo, {String? excludeId}) async {
-    final wanted = admissionNo.trim().toLowerCase();
-    final snapshot = await _refs.students.get();
-    for (final child in snapshot.children) {
-      if (child.key == excludeId) continue;
-      final existing =
-          (asMap(child.value)['admissionNo'] ?? '').toString().toLowerCase();
-      if (existing == wanted) return true;
+    final owner =
+        await _refs.admissionIndex.child(indexKey(admissionNo)).get();
+    return owner.exists && owner.value != excludeId;
+  }
+
+  /// Creates or updates [student] as ONE atomic update: public record, private
+  /// record and admission-number index entry. [previousAdmissionNo] is the
+  /// number the record had before editing; its index entry is released when
+  /// the number changes. Returns the student id.
+  Future<String> save(Student student, {String? previousAdmissionNo}) async {
+    final id = student.id.isEmpty ? _refs.students.push().key! : student.id;
+    final newKey = indexKey(student.admissionNo);
+    final updates = <String, Object?>{
+      'students/$id': student.toPublicMap(),
+      'studentPrivate/$id': student.toPrivateMap(),
+      'index/admissionNo/$newKey': id,
+    };
+    if (previousAdmissionNo != null && previousAdmissionNo.isNotEmpty) {
+      final oldKey = indexKey(previousAdmissionNo);
+      if (oldKey != newKey) updates['index/admissionNo/$oldKey'] = null;
     }
-    return false;
+    await _refs.school.update(updates);
+    return id;
   }
 
-  Future<String> add(Student student) async {
-    final ref = _refs.students.push();
-    await ref.set(student.toMap());
-    return ref.key!;
+  /// Removes the public record, private record and index entry together.
+  Future<void> delete(Student student) {
+    return _refs.school.update({
+      'students/${student.id}': null,
+      'studentPrivate/${student.id}': null,
+      if (student.admissionNo.isNotEmpty)
+        'index/admissionNo/${indexKey(student.admissionNo)}': null,
+    });
   }
-
-  Future<void> update(Student student) {
-    return _refs.students.child(student.id).update(student.toMap());
-  }
-
-  Future<void> delete(String id) => _refs.students.child(id).remove();
 }

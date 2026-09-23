@@ -16,6 +16,8 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   final _service = SchoolService();
+  late final Stream<School> _school =
+      _service.streamSchool(context.read<AuthController>().schoolId!);
   final _name = TextEditingController();
   final _address = TextEditingController();
   final _phone = TextEditingController();
@@ -73,7 +75,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: StreamBuilder<School>(
-        stream: _service.streamSchool(schoolId),
+        stream: _school,
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return ErrorView(message: '${snapshot.error}');

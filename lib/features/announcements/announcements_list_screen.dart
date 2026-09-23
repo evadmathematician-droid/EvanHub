@@ -75,7 +75,9 @@ class AnnouncementsListScreen extends StatelessWidget {
                     ],
                   ),
                   isThreeLine: true,
-                  trailing: canPost
+                  // The author or an admin may delete (database rules).
+                  trailing: canPost &&
+                          (auth.isAdmin || a.authorUid == auth.appUser?.uid)
                       ? IconButton(
                           icon: const Icon(Icons.delete_outline),
                           tooltip: 'Delete announcement',

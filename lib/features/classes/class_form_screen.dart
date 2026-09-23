@@ -106,8 +106,10 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
       appBar: AppBar(
         title: Text(_isEdit ? 'Edit class' : 'Add class'),
         actions: [
-          if (_isEdit)
+          // Only admins may delete classes (database rules).
+          if (_isEdit && context.read<AuthController>().isAdmin)
             IconButton(
+              tooltip: 'Delete class',
               onPressed: _busy ? null : _confirmDelete,
               icon: const Icon(Icons.delete_outline),
             ),

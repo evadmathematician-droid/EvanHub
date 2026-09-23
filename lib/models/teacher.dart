@@ -32,7 +32,13 @@ class TeacherDocument {
       };
 }
 
-/// A teacher record — `schools/{schoolId}/teachers/{teacherId}`.
+/// A teacher. Stored in two halves with the same id (see
+/// `database.rules.json`):
+///  - `schools/{schoolId}/teachers/{id}` — public fields ([toPublicMap]),
+///    readable by admins and teachers;
+///  - `schools/{schoolId}/teacherPrivate/{id}` — NIN, contact details,
+///    documents … ([toPrivateMap]), admins only.
+/// Lists load only the public half; [withPrivate] fills in the rest.
 ///
 /// This is the HR/records entry. It is separate from a `members/{uid}` login;
 /// link them by setting [linkedUid] once the teacher has an account.
@@ -98,62 +104,83 @@ class Teacher {
 
   String get fullName => '$firstName $lastName'.trim();
 
-  factory Teacher.fromMap(String id, Map<String, dynamic> data) {
-    String s(String key) => (data[key] ?? '') as String;
+  /// Builds a teacher from its public and private halves. Passing the same
+  /// map twice reads a pre-Phase-1 record that held every field in one place.
+  factory Teacher.fromParts(
+    String id,
+    Map<String, dynamic> public,
+    Map<String, dynamic> private,
+  ) {
+    String s(String key) => (public[key] ?? '') as String;
+    String p(String key) => (private[key] ?? '') as String;
     return Teacher(
       id: id,
       firstName: s('firstName'),
       lastName: s('lastName'),
-      email: s('email'),
-      phone: s('phone'),
-      subjects: (data['subjects'] as List?)?.map((e) => '$e').toList() ?? const [],
-      employmentType: (data['employmentType'] ?? 'full_time') as String,
-      status: (data['status'] ?? 'active') as String,
-      linkedUid: data['linkedUid'] as String?,
-      createdAt: fromMillis(data['createdAt']),
-      nin: s('nin'),
       gender: s('gender'),
-      maritalStatus: s('maritalStatus'),
-      dob: fromMillis(data['dob']),
-      address: s('address'),
-      isPincoded: data['isPincoded'] == true,
-      pincode: s('pincode'),
-      qualification: s('qualification'),
-      experience: s('experience'),
+      subjects:
+          (public['subjects'] as List?)?.map((e) => '$e').toList() ?? const [],
       level: s('level'),
       stream: s('stream'),
+      employmentType: (public['employmentType'] ?? 'full_time') as String,
+      status: (public['status'] ?? 'active') as String,
       photoUrl: s('photoUrl'),
+      linkedUid: public['linkedUid'] as String?,
+      createdAt: fromMillis(public['createdAt']),
+      nin: p('nin'),
+      isPincoded: private['isPincoded'] == true,
+      pincode: p('pincode'),
+      maritalStatus: p('maritalStatus'),
+      dob: fromMillis(private['dob']),
+      email: p('email'),
+      phone: p('phone'),
+      address: p('address'),
+      qualification: p('qualification'),
+      experience: p('experience'),
       documents: [
-        for (final d in (data['documents'] as List?) ?? const [])
+        for (final d in (private['documents'] as List?) ?? const [])
           if (d is Map) TeacherDocument.fromMap(asMap(d)),
       ],
     );
   }
 
-  Map<String, dynamic> toMap() => {
+  /// Public half only (what list screens load).
+  factory Teacher.fromMap(String id, Map<String, dynamic> data) =>
+      Teacher.fromParts(id, data, const {});
+
+  /// This teacher with the private half from `teacherPrivate/{id}` filled in.
+  Teacher withPrivate(Map<String, dynamic> private) =>
+      Teacher.fromParts(id, toPublicMap(), private);
+
+  /// `teachers/{id}` — readable by admins and teachers.
+  Map<String, dynamic> toPublicMap() => {
         'firstName': firstName,
         'lastName': lastName,
-        'email': email,
-        'phone': phone,
+        'gender': gender,
         'subjects': subjects,
+        'level': level,
+        'stream': stream,
         'employmentType': employmentType,
         'status': status,
+        'photoUrl': photoUrl,
         'linkedUid': linkedUid,
         'createdAt': createdAt == null
             ? ServerValue.timestamp
             : toMillis(createdAt),
+      };
+
+  /// `teacherPrivate/{id}` — admins only.
+  Map<String, dynamic> toPrivateMap() => {
         'nin': nin,
-        'gender': gender,
-        'maritalStatus': maritalStatus,
-        'dob': toMillis(dob),
-        'address': address,
         'isPincoded': isPincoded,
         'pincode': isPincoded ? pincode : '',
+        'maritalStatus': maritalStatus,
+        'dob': toMillis(dob),
+        'email': email,
+        'phone': phone,
+        'address': address,
         'qualification': qualification,
         'experience': experience,
-        'level': level,
-        'stream': stream,
-        'photoUrl': photoUrl,
         'documents': documents.map((d) => d.toMap()).toList(),
       };
 

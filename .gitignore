@@ -35,6 +35,10 @@ migrate_working_dir/
 build/
 /coverage/
 
+# Database exports contain personal data - never commit them
+backup/
+*.export.json
+
 # Machine-specific SDK paths
 local.properties
 **/android/.gradle/

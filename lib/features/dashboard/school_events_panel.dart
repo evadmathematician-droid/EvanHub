@@ -115,7 +115,11 @@ class _SchoolEventsPanelState extends State<SchoolEventsPanel> {
                 for (final e in visible)
                   _EventCard(
                     event: e,
-                    onDelete: canPost ? () => _delete(service, e) : null,
+                    // The author or an admin may delete (database rules).
+                    onDelete: canPost &&
+                            (auth.isAdmin || e.authorUid == auth.appUser?.uid)
+                        ? () => _delete(service, e)
+                        : null,
                   ),
                 if (events.length > _collapsedCount)
                   TextButton(

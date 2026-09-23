@@ -67,6 +67,10 @@ class _StudentFormScreenState extends State<StudentFormScreen> {
   bool _photoBusy = false;
   String? _error;
 
+  /// False while an existing student's private half (dob, guardian, exams) is
+  /// loading. Saving is blocked until then so those fields are never wiped.
+  bool _privateLoaded = true;
+
   bool get _isEdit => widget.existing != null;
 
   SchoolClass? get _selectedClass {
@@ -153,6 +157,35 @@ class _StudentFormScreenState extends State<StudentFormScreen> {
     _classSub = ClassService(tenant).watchAll().listen((list) {
       if (mounted) setState(() => _classes = list);
     });
+    if (s != null) _loadPrivate(StudentService(tenant), s);
+  }
+
+  Future<void> _loadPrivate(StudentService service, Student s) async {
+    setState(() => _privateLoaded = false);
+    try {
+      final full = await service.loadPrivate(s);
+      if (!mounted) return;
+      setState(() {
+        _dob = full.dob;
+        _dobText.text = _formatDate(full.dob);
+        _address.text = full.address;
+        _guardianName.text = full.guardianName;
+        _guardianPhone.text = full.guardianPhone;
+        _examId[_Exam.npse]!.text = full.npseId;
+        _examYear[_Exam.npse]!.text = full.npseYear;
+        _examId[_Exam.bece]!.text = full.beceId;
+        _examYear[_Exam.bece]!.text = full.beceYear;
+        _examId[_Exam.wassce]!.text = full.wassceId;
+        _examYear[_Exam.wassce]!.text = full.wassceYear;
+        _privateLoaded = true;
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() => _error =
+            'Could not load this student\'s private details, so saving is '
+            'disabled. Go back and open the student again.');
+      }
+    }
   }
 
   @override
@@ -218,6 +251,7 @@ class _StudentFormScreenState extends State<StudentFormScreen> {
   }
 
   Future<void> _save() async {
+    if (!_privateLoaded) return;
     if (!_formKey.currentState!.validate()) return;
     final schoolClass = _selectedClass;
     final level = _level;
@@ -283,14 +317,13 @@ class _StudentFormScreenState extends State<StudentFormScreen> {
         status: _status,
         createdAt: widget.existing?.createdAt,
       );
-      if (_isEdit) {
-        await service.update(student);
-      } else {
-        await service.add(student);
-      }
+      await service.save(
+        student,
+        previousAdmissionNo: widget.existing?.admissionNo,
+      );
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
-      setState(() => _error = 'Save failed: $e');
+      if (mounted) setState(() => _error = saveErrorMessage(e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -307,7 +340,7 @@ class _StudentFormScreenState extends State<StudentFormScreen> {
     final service = StudentService(context.read<AuthController>().tenant!);
     final deleted = await runDelete(
       context,
-      () => service.delete(student.id),
+      () => service.delete(student),
       done: '${student.fullName} deleted.',
     );
     if (deleted && mounted) Navigator.of(context).pop();
@@ -315,6 +348,13 @@ class _StudentFormScreenState extends State<StudentFormScreen> {
 
   String? _required(String? v) =>
       (v == null || v.trim().isEmpty) ? 'Required' : null;
+
+  String? _optionalYear(String? v) {
+    final t = (v ?? '').trim();
+    return t.isEmpty || RegExp(r'^[0-9]{4}$').hasMatch(t)
+        ? null
+        : 'Enter a 4-digit year';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -329,12 +369,20 @@ class _StudentFormScreenState extends State<StudentFormScreen> {
       appBar: AppBar(
         title: Text(_isEdit ? 'Edit student' : 'Register student'),
         actions: [
-          if (_isEdit)
+          // Only admins may delete students (database rules).
+          if (_isEdit && context.read<AuthController>().isAdmin)
             IconButton(
-              onPressed: _busy ? null : _confirmDelete,
+              tooltip: 'Delete student',
+              onPressed: (_busy || !_privateLoaded) ? null : _confirmDelete,
               icon: const Icon(Icons.delete_outline),
             ),
         ],
+        bottom: _privateLoaded
+            ? null
+            : const PreferredSize(
+                preferredSize: Size.fromHeight(4),
+                child: LinearProgressIndicator(),
+              ),
       ),
       body: Form(
         key: _formKey,
@@ -368,25 +416,32 @@ class _StudentFormScreenState extends State<StudentFormScreen> {
             const SizedBox(height: 16),
             TextFormField(
               controller: _admissionNo,
-              decoration: const InputDecoration(labelText: 'Admission no. *'),
+              maxLength: 30,
+              decoration: const InputDecoration(
+                  labelText: 'Admission no. *', counterText: ''),
               validator: _required,
             ),
             const SizedBox(height: 12),
             TextFormField(
               controller: _firstName,
-              decoration: const InputDecoration(labelText: 'First name *'),
+              maxLength: 60,
+              decoration: const InputDecoration(
+                  labelText: 'First name *', counterText: ''),
               validator: _required,
             ),
             const SizedBox(height: 12),
             TextFormField(
               controller: _middleName,
-              decoration:
-                  const InputDecoration(labelText: 'Middle name (optional)'),
+              maxLength: 60,
+              decoration: const InputDecoration(
+                  labelText: 'Middle name (optional)', counterText: ''),
             ),
             const SizedBox(height: 12),
             TextFormField(
               controller: _lastName,
-              decoration: const InputDecoration(labelText: 'Last name *'),
+              maxLength: 60,
+              decoration: const InputDecoration(
+                  labelText: 'Last name *', counterText: ''),
               validator: _required,
             ),
             const SizedBox(height: 12),
@@ -493,7 +548,10 @@ class _StudentFormScreenState extends State<StudentFormScreen> {
             TextFormField(
               controller: _admissionYear,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Admission year'),
+              maxLength: 4,
+              decoration: const InputDecoration(
+                  labelText: 'Admission year', counterText: ''),
+              validator: _optionalYear,
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
@@ -514,13 +572,18 @@ class _StudentFormScreenState extends State<StudentFormScreen> {
               const SizedBox(height: 8),
               TextFormField(
                 controller: _examId[exam],
-                decoration: InputDecoration(labelText: '${exam.label} ID'),
+                maxLength: 20,
+                decoration: InputDecoration(
+                    labelText: '${exam.label} ID', counterText: ''),
               ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _examYear[exam],
                 keyboardType: TextInputType.number,
-                decoration: InputDecoration(labelText: '${exam.label} year'),
+                maxLength: 4,
+                decoration: InputDecoration(
+                    labelText: '${exam.label} year', counterText: ''),
+                validator: _optionalYear,
               ),
             ],
             const SizedBox(height: 20),
@@ -528,18 +591,24 @@ class _StudentFormScreenState extends State<StudentFormScreen> {
             const SizedBox(height: 8),
             TextFormField(
               controller: _guardianName,
-              decoration: const InputDecoration(labelText: 'Guardian name'),
+              maxLength: 100,
+              decoration: const InputDecoration(
+                  labelText: 'Guardian name', counterText: ''),
             ),
             const SizedBox(height: 12),
             TextFormField(
               controller: _guardianPhone,
               keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(labelText: 'Guardian phone'),
+              maxLength: 40,
+              decoration: const InputDecoration(
+                  labelText: 'Guardian phone', counterText: ''),
             ),
             const SizedBox(height: 12),
             TextFormField(
               controller: _address,
-              decoration: const InputDecoration(labelText: 'Address'),
+              maxLength: 300,
+              decoration: const InputDecoration(
+                  labelText: 'Address', counterText: ''),
             ),
             if (_error != null) ...[
               const SizedBox(height: 12),
@@ -547,7 +616,7 @@ class _StudentFormScreenState extends State<StudentFormScreen> {
             ],
             const SizedBox(height: 20),
             ElevatedButton(
-              onPressed: (_busy || _photoBusy) ? null : _save,
+              onPressed: (_busy || _photoBusy || !_privateLoaded) ? null : _save,
               child: Text(_isEdit ? 'Save changes' : 'Register student'),
             ),
           ],

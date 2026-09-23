@@ -37,6 +37,20 @@ Stream<List<T>> watchList<T>(
   });
 }
 
+/// Key for `index/admissionNo/{key}`: lower-cased, with the characters a
+/// database key can't hold (and `%` itself) percent-encoded. Must match the
+/// normalisation in `database.rules.json`, which re-checks it.
+String indexKey(String admissionNo) => admissionNo
+    .trim()
+    .toLowerCase()
+    .replaceAll('%', '%25')
+    .replaceAll('.', '%2e')
+    .replaceAll('#', '%23')
+    .replaceAll(r'$', '%24')
+    .replaceAll('[', '%5b')
+    .replaceAll(']', '%5d')
+    .replaceAll('/', '%2f');
+
 /// Case-insensitive string comparison used for name ordering.
 int compareText(String a, String b) =>
     a.toLowerCase().compareTo(b.toLowerCase());

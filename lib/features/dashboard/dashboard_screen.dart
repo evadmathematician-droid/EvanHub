@@ -19,11 +19,14 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   late Future<SchoolStats> _statsFuture;
+  late final Stream<School> _school;
 
   @override
   void initState() {
     super.initState();
     _statsFuture = _loadStats();
+    _school = SchoolService()
+        .streamSchool(context.read<AuthController>().schoolId!);
   }
 
   Future<SchoolStats> _loadStats() {
@@ -33,9 +36,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final auth = context.watch<AuthController>();
-    final schoolId = auth.schoolId!;
-
     return Scaffold(
       appBar: AppBar(title: const Text('Dashboard')),
       body: RefreshIndicator(
@@ -48,7 +48,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           children: [
             // Profile banner runs edge to edge; the rest is padded below.
             StreamBuilder<School>(
-              stream: SchoolService().streamSchool(schoolId),
+              stream: _school,
               builder: (context, snapshot) => SchoolHero(
                 school: snapshot.data,
               ),

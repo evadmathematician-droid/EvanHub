@@ -41,28 +41,37 @@ class PromotionService {
         data['lastName'],
       ].where((p) => !_blank(p)).join(' ');
 
+  /// Active pupils in [classId] as (id, public record, private record). Exam
+  /// records live in `studentPrivate`, the class and status in `students`.
+  Future<List<(String, Map<String, dynamic>, Map<String, dynamic>)>>
+      _activeIn(String classId) async {
+    final results = await Future.wait([
+      _refs.students.get(),
+      _refs.studentPrivate.get(),
+    ]);
+    final private = asMap(results[1].value);
+    return [
+      for (final child in results[0].children)
+        if (child.key != null &&
+            asMap(child.value)['classId'] == classId &&
+            (asMap(child.value)['status'] ?? 'active') == 'active')
+          (child.key!, asMap(child.value), asMap(private[child.key])),
+    ];
+  }
+
   /// Active pupils in [classId] whose BECE ID or year is missing. Promoting
   /// JSS 3 → SSS 1 is blocked until each of them has both.
   Future<List<MissingBece>> activeStudentsMissingBece(String classId) async {
-    final snapshot = await _refs.students.get();
-    final missing = <MissingBece>[];
-    for (final child in snapshot.children) {
-      final data = asMap(child.value);
-      if (child.key == null ||
-          data['classId'] != classId ||
-          (data['status'] ?? 'active') != 'active') {
-        continue;
-      }
-      if (_blank(data['beceId']) || _blank(data['beceYear'])) {
-        missing.add(MissingBece(
-          child.key!,
-          _name(data),
-          (data['beceId'] ?? '').toString(),
-          (data['beceYear'] ?? '').toString(),
-        ));
-      }
-    }
-    return missing;
+    return [
+      for (final (id, data, private) in await _activeIn(classId))
+        if (_blank(private['beceId']) || _blank(private['beceYear']))
+          MissingBece(
+            id,
+            _name(data),
+            (private['beceId'] ?? '').toString(),
+            (private['beceYear'] ?? '').toString(),
+          ),
+    ];
   }
 
   /// Moves every active student in [fromClassId] to [toClassId] (or graduates
@@ -83,37 +92,27 @@ class PromotionService {
     bool requireWassce = false,
     Map<String, BeceRecord> bece = const {},
   }) async {
-    final snapshot = await _refs.students.get();
-
     final updates = <String, Object?>{};
     final skipped = <String>[];
     final stillMissingBece = <String>[];
     var count = 0;
-    for (final child in snapshot.children) {
-      final id = child.key;
-      final data = asMap(child.value);
-      if (id == null ||
-          data['classId'] != fromClassId ||
-          (data['status'] ?? 'active') != 'active') {
-        continue;
-      }
-
+    for (final (id, data, private) in await _activeIn(fromClassId)) {
       if (requireBece) {
         final given = bece[id];
-        final beceId = given?.id ?? data['beceId'];
-        final beceYear = given?.year ?? data['beceYear'];
+        final beceId = given?.id ?? private['beceId'];
+        final beceYear = given?.year ?? private['beceYear'];
         if (_blank(beceId) || _blank(beceYear)) {
           stillMissingBece.add(_name(data));
           continue;
         }
         if (given != null) {
-          updates['students/$id/beceId'] = given.id;
-          updates['students/$id/beceYear'] = given.year;
+          updates['studentPrivate/$id/beceId'] = given.id;
+          updates['studentPrivate/$id/beceYear'] = given.year;
         }
       }
 
       if (requireWassce &&
-          (_blank(data['wassceId']) || _blank(data['wassceYear']))) {
+          (_blank(private['wassceId']) || _blank(private['wassceYear']))) {
         skipped.add('${_name(data)} (WASSCE ID and year missing)');
         continue;
       }

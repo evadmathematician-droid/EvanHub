@@ -47,6 +47,19 @@ Future<bool> runDelete(
   }
 }
 
+/// Plain-English message for a failed save. The database rules re-check every
+/// field and the admission-number / NIN indexes, so a rejection usually means
+/// a value is out of range or the number was just taken by someone else.
+String saveErrorMessage(Object e) {
+  debugPrint('Save failed: $e');
+  if (e is FirebaseException && e.code == 'permission-denied') {
+    return 'The database rejected this save. The number may have just been '
+        'taken by another record, or a field has a value that is not '
+        'allowed. Check the form and try again.';
+  }
+  return 'Save failed. Check your connection and try again.';
+}
+
 String _friendly(Object e) {
   if (e is FirebaseException && e.code == 'permission-denied') {
     return "You don't have permission to delete this.";

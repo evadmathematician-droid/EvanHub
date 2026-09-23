@@ -18,7 +18,13 @@ class StudentStatus {
       status.isEmpty ? '' : status[0].toUpperCase() + status.substring(1);
 }
 
-/// A student record — `schools/{schoolId}/students/{studentId}`.
+/// A student. Stored in two halves with the same id (see
+/// `database.rules.json`):
+///  - `schools/{schoolId}/students/{id}` — public fields ([toPublicMap]);
+///  - `schools/{schoolId}/studentPrivate/{id}` — personal details and exam
+///    records ([toPrivateMap]).
+/// Lists load only the public half, so private fields hold their defaults
+/// until [withPrivate] fills them in.
 class Student {
   final String id;
   final String firstName;
@@ -83,46 +89,70 @@ class Student {
       .where((p) => p.trim().isNotEmpty)
       .join(' ');
 
-  factory Student.fromMap(String id, Map<String, dynamic> data) {
-    String s(String key) => (data[key] ?? '') as String;
+  /// Builds a student from its public and private halves. Passing the same
+  /// map twice reads a pre-Phase-1 record that held every field in one place.
+  factory Student.fromParts(
+    String id,
+    Map<String, dynamic> public,
+    Map<String, dynamic> private,
+  ) {
+    String s(String key) => (public[key] ?? '') as String;
+    String p(String key) => (private[key] ?? '') as String;
     return Student(
       id: id,
       firstName: s('firstName'),
       middleName: s('middleName'),
       lastName: s('lastName'),
-      dob: fromMillis(data['dob']),
       gender: s('gender'),
-      level: SchoolLevel.fromWire(data['level']),
-      classId: data['classId'] as String?,
-      department: data['department'] as String?,
+      level: SchoolLevel.fromWire(public['level']),
+      classId: public['classId'] as String?,
+      department: public['department'] as String?,
       admissionNo: s('admissionNo'),
       admissionYear: s('admissionYear'),
-      address: s('address'),
-      guardianName: s('guardianName'),
-      guardianPhone: s('guardianPhone'),
-      npseId: s('npseId'),
-      npseYear: s('npseYear'),
-      beceId: s('beceId'),
-      beceYear: s('beceYear'),
-      wassceId: s('wassceId'),
-      wassceYear: s('wassceYear'),
       photoUrl: s('photoUrl'),
-      status: (data['status'] ?? StudentStatus.active) as String,
-      createdAt: fromMillis(data['createdAt']),
+      status: (public['status'] ?? StudentStatus.active) as String,
+      createdAt: fromMillis(public['createdAt']),
+      dob: fromMillis(private['dob']),
+      address: p('address'),
+      guardianName: p('guardianName'),
+      guardianPhone: p('guardianPhone'),
+      npseId: p('npseId'),
+      npseYear: p('npseYear'),
+      beceId: p('beceId'),
+      beceYear: p('beceYear'),
+      wassceId: p('wassceId'),
+      wassceYear: p('wassceYear'),
     );
   }
 
-  Map<String, dynamic> toMap() => {
+  /// Public half only (what list screens load).
+  factory Student.fromMap(String id, Map<String, dynamic> data) =>
+      Student.fromParts(id, data, const {});
+
+  /// This student with the private half from `studentPrivate/{id}` filled in.
+  Student withPrivate(Map<String, dynamic> private) =>
+      Student.fromParts(id, toPublicMap(), private);
+
+  /// `students/{id}` — readable by admins and teachers.
+  Map<String, dynamic> toPublicMap() => {
         'firstName': firstName,
         'middleName': middleName,
         'lastName': lastName,
-        'dob': toMillis(dob),
         'gender': gender,
         'level': level?.wire,
         'classId': classId,
         'department': department,
         'admissionNo': admissionNo,
         'admissionYear': admissionYear,
+        'status': status,
+        'photoUrl': photoUrl,
+        'createdAt':
+            createdAt == null ? ServerValue.timestamp : toMillis(createdAt),
+      };
+
+  /// `studentPrivate/{id}` — personal details and exam records.
+  Map<String, dynamic> toPrivateMap() => {
+        'dob': toMillis(dob),
         'address': address,
         'guardianName': guardianName,
         'guardianPhone': guardianPhone,
@@ -132,9 +162,5 @@ class Student {
         'beceYear': beceYear,
         'wassceId': wassceId,
         'wassceYear': wassceYear,
-        'photoUrl': photoUrl,
-        'status': status,
-        'createdAt':
-            createdAt == null ? ServerValue.timestamp : toMillis(createdAt),
       };
 }

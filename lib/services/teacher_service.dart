@@ -7,31 +7,53 @@ class TeacherService {
 
   final TenantRefs _refs;
 
+  /// Public halves only, sorted by last name.
   Stream<List<Teacher>> watchAll() {
     return watchList(_refs.teachers, Teacher.fromMap).map(
       (list) => list..sort((a, b) => compareText(a.lastName, b.lastName)),
     );
   }
 
-  /// True when another teacher in this school already has [nin].
+  /// [teacher] with its `teacherPrivate` half loaded (admins only).
+  Future<Teacher> loadPrivate(Teacher teacher) async {
+    final snapshot = await _refs.teacherPrivate.child(teacher.id).get();
+    return teacher.withPrivate(asMap(snapshot.value));
+  }
+
+  /// True when another teacher in this school already has [nin]. The
+  /// database rules enforce this too; this check gives a friendly message.
   Future<bool> ninTaken(String nin, {String? excludeId}) async {
-    final snapshot = await _refs.teachers.get();
-    for (final child in snapshot.children) {
-      if (child.key == excludeId) continue;
-      if (asMap(child.value)['nin'] == nin) return true;
+    if (nin.isEmpty) return false;
+    final owner = await _refs.ninIndex.child(nin).get();
+    return owner.exists && owner.value != excludeId;
+  }
+
+  /// Creates or updates [teacher] as ONE atomic update: public record, private
+  /// record and NIN index entry. [previousNin] is the NIN before editing; its
+  /// index entry is released when the NIN changes. Returns the teacher id.
+  Future<String> save(Teacher teacher, {String? previousNin}) async {
+    final id = teacher.id.isEmpty ? _refs.teachers.push().key! : teacher.id;
+    final updates = <String, Object?>{
+      'teachers/$id': teacher.toPublicMap(),
+      'teacherPrivate/$id': teacher.toPrivateMap(),
+      if (teacher.nin.isNotEmpty) 'index/nin/${teacher.nin}': id,
+    };
+    if (previousNin != null &&
+        previousNin.isNotEmpty &&
+        previousNin != teacher.nin) {
+      updates['index/nin/$previousNin'] = null;
     }
-    return false;
+    await _refs.school.update(updates);
+    return id;
   }
 
-  Future<String> add(Teacher teacher) async {
-    final ref = _refs.teachers.push();
-    await ref.set(teacher.toMap());
-    return ref.key!;
+  /// Removes the public record, private record and NIN index entry together.
+  /// [teacher] must have its private half loaded (for the NIN).
+  Future<void> delete(Teacher teacher) {
+    return _refs.school.update({
+      'teachers/${teacher.id}': null,
+      'teacherPrivate/${teacher.id}': null,
+      if (teacher.nin.isNotEmpty) 'index/nin/${teacher.nin}': null,
+    });
   }
-
-  Future<void> update(Teacher teacher) {
-    return _refs.teachers.child(teacher.id).update(teacher.toMap());
-  }
-
-  Future<void> delete(String id) => _refs.teachers.child(id).remove();
 }

@@ -47,6 +47,12 @@ firebase deploy --only database
 This publishes `database.rules.json`, which enforces per-school isolation. Deploy
 it before anyone signs in. See `docs/MULTI_TENANCY.md`.
 
+**Upgrading an existing school to the Phase 1 rules:** export a JSON backup
+first, deploy the rules and install the new app in the same sitting, then have
+a school admin sign in and run **Update school data**. Full steps are in
+`docs/MULTI_TENANCY.md` ("Migrating a pre-Phase-1 school"), and the rule tests
+are in `docs/RULES_TEST_CHECKLIST.md`.
+
 ## 4. Cloudinary
 
 Uploads (student/teacher photos, teacher documents, school documents, event
@@ -90,10 +96,13 @@ rules, which is why this works.
      `{ "role": "teacher", "displayName": "...", "email": "...", "addedBy": "<admin uid>" }`
      (use `"parentStudent"` for a parent/student account)
    - `users/{uid}` =
-     `{ "schoolId": "{schoolId}", "role": "teacher", "email": "...", "displayName": "..." }`
+     `{ "schoolId": "{schoolId}", "email": "...", "displayName": "..." }`
 
-The rules check `members/{uid}`; the app uses `users/{uid}` to find the school
-and show the right buttons. Keep both roles the same.
+`users/{uid}.schoolId` tells the app which school to open. The **role** is read
+only from `members/{uid}`, the same record the database rules check. To change
+someone's role or remove them, edit or delete their `members/{uid}` entry: the
+app reacts immediately. Parent/student accounts see "Parent portal coming soon"
+for now.
 
 ## Tests
 
