@@ -60,9 +60,9 @@ class PhotoViewer extends StatelessWidget {
           child: CachedNetworkImage(
             imageUrl: url,
             fit: BoxFit.contain,
-            placeholder: (_, __) =>
+            placeholder: (_, _) =>
                 const CircularProgressIndicator(color: Colors.white),
-            errorWidget: (_, __, ___) =>
+            errorWidget: (_, _, _) =>
                 const Icon(Icons.broken_image, color: Colors.white, size: 64),
           ),
         ),
