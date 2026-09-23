@@ -1,0 +1,62 @@
+name: evangelistglobal
+description: "Evangelist Global — multi-tenant school management SaaS."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.12.1
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+
+  # State management
+  provider: ^6.1.5
+
+  # Navigation
+  go_router: ^16.0.0
+
+  # Firebase
+  firebase_core: ^4.14.0
+  firebase_auth: ^6.1.0
+  firebase_database: ^12.0.0
+  http: ^1.2.0
+  firebase_analytics: ^12.5.0
+  firebase_performance: ^0.11.5
+
+  # Utilities
+  intl: ^0.19.0
+  file_picker: ^13.1.0
+  cached_network_image: ^3.4.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/
+    - assets/icon/
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/app_icon.jpg"
+  min_sdk_android: 23
+  web:
+    generate: true
+    image_path: "assets/icon/app_icon.jpg"
+  windows:
+    generate: true
+    image_path: "assets/icon/app_icon.jpg"
+  macos:
+    generate: true
+    image_path: "assets/icon/app_icon.jpg"

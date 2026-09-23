@@ -1,0 +1,61 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "users": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+
+    "schools": {
+      "$sid": {
+        ".read": "auth != null && root.child('schools').child($sid).child('members').child(auth.uid).exists()",
+
+        ".write": "auth != null && !data.exists() && newData.child('ownerUid').val() === auth.uid && newData.child('members').child(auth.uid).child('role').val() === 'schoolAdmin'",
+
+        "ownerUid": {
+          ".validate": "!data.exists() || newData.val() === data.val()"
+        },
+
+        "meta": {
+          ".write": "auth != null && root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin'"
+        },
+
+        "updatedAt": {
+          ".write": "auth != null && root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin'"
+        },
+
+        "members": {
+          ".write": "auth != null && root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin'"
+        },
+
+        "teachers": {
+          ".write": "auth != null && root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin'"
+        },
+
+        "promotions": {
+          ".write": "auth != null && root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin'"
+        },
+
+        "classes": {
+          ".write": "auth != null && (root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin' || root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'teacher')"
+        },
+        "students": {
+          ".write": "auth != null && (root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin' || root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'teacher')"
+        },
+        "documents": {
+          ".write": "auth != null && (root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin' || root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'teacher')"
+        },
+        "events": {
+          ".write": "auth != null && (root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin' || root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'teacher')"
+        },
+        "announcements": {
+          ".write": "auth != null && (root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin' || root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'teacher')"
+        }
+      }
+    }
+  }
+}
