@@ -176,10 +176,10 @@ class AuthController extends ChangeNotifier {
 
   // --- Actions -------------------------------------------------------------
 
-  Future<void> signIn({required String email, required String password}) async {
+  Future<User> signIn({required String email, required String password}) async {
     _errorMessage = null;
     try {
-      await _auth.signIn(email: email, password: password);
+      return await _auth.signIn(email: email, password: password);
     } on AuthException catch (e) {
       _errorMessage = e.message;
       notifyListeners();
@@ -213,6 +213,24 @@ class AuthController extends ChangeNotifier {
         ownerEmail: user.email ?? adminEmail,
         meta: meta,
       );
+    } on AuthException catch (e) {
+      _errorMessage = e.message;
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  /// Creates an account (used when joining with an invite code). The account
+  /// has no school until the join update is written.
+  Future<User> register({
+    required String name,
+    required String email,
+    required String password,
+  }) async {
+    _errorMessage = null;
+    try {
+      return await _auth.register(
+          email: email, password: password, displayName: name);
     } on AuthException catch (e) {
       _errorMessage = e.message;
       notifyListeners();

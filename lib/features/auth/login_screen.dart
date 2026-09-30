@@ -130,6 +130,13 @@ class _LoginScreenState extends State<LoginScreen> {
                       child: const Text('Forgot password?'),
                     ),
                     const Divider(height: 32),
+                    OutlinedButton.icon(
+                      onPressed:
+                          _busy ? null : () => context.push(Routes.join),
+                      icon: const Icon(Icons.vpn_key_outlined),
+                      label: const Text('I have an invite code'),
+                    ),
+                    const SizedBox(height: 20),
                     const Text('New school?',
                         textAlign: TextAlign.center,
                         style: TextStyle(color: AppColors.textSecondary)),

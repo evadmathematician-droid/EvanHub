@@ -1,8 +1,9 @@
 {
-  // Evangelist Global - Realtime Database rules (Phase 1).
+  // Evangelist Global - Realtime Database rules (Phase 1 + Phase 2).
   //
   // Access is decided by schools/{sid}/members/{uid}.role:
   //   schoolAdmin | teacher | parentStudent
+  // New members join with an invite code (invites/{CODE}); see "JOIN" below.
   // There is NO read rule on schools/{sid} itself: each branch grants its own
   // reads, because a read granted on a parent can never be revoked below it.
   // Writes are allowed only on single records (e.g. students/{id}), never on a
@@ -19,13 +20,62 @@
     "users": {
       "$uid": {
         ".read": "auth != null && auth.uid === $uid",
-        ".write": "auth != null && auth.uid === $uid",
-        "schoolId": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 40" },
+        // Own record only. schoolId can be set when empty, kept, or changed /
+        // cleared once you are no longer a member of the old school - so an
+        // active member can never switch schools.
+        ".write": "auth != null && auth.uid === $uid && (!data.child('schoolId').exists() || newData.child('schoolId').val() === data.child('schoolId').val() || !root.child('schools').child(data.child('schoolId').val()).child('members').child($uid).exists())",
+        // A new schoolId is only valid if you are a member there after this
+        // update (onboarding creates the membership; so does joining).
+        "schoolId": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 40 && newData.parent().parent().parent().child('schools').child(newData.val()).child('members').child($uid).exists()" },
         "role": { ".validate": "newData.isString() && (newData.val() === 'schoolAdmin' || newData.val() === 'teacher' || newData.val() === 'parentStudent' || newData.val() === 'superAdmin')" },
         "email": { ".validate": "newData.isString() && newData.val().length <= 120" },
         "displayName": { ".validate": "newData.isString() && newData.val().length <= 100" },
         "createdAt": { ".validate": "newData.isNumber()" },
         "updatedAt": { ".validate": "newData.isNumber()" },
+        "$other": { ".validate": false }
+      }
+    },
+
+    // Invite codes live at the ROOT so a not-yet-member can look one up.
+    // Anyone who knows a code may read that ONE code - even before signing
+    // in, so the join screen can show the school name first. There is no
+    // read rule on "invites" itself, so codes can't be listed. Codes: 8
+    // characters from ABCDEFGHJKLMNPQRSTUVWXYZ23456789 (no 0 O 1 I), shown
+    // as XXXX-XXXX (~1.1 trillion possibilities).
+    "invites": {
+      "$code": {
+        ".read": true,
+        // Only an admin of the invite's school creates or deletes it; nobody
+        // edits it (a joiner may only fill usedBy / usedAt, below).
+        ".write": "auth != null && ((!data.exists() && newData.exists() && root.child('schools').child(newData.child('schoolId').val()).child('members').child(auth.uid).child('role').val() === 'schoolAdmin') || (data.exists() && !newData.exists() && root.child('schools').child(data.child('schoolId').val()).child('members').child(auth.uid).child('role').val() === 'schoolAdmin'))",
+        // Created together with the school's inviteList entry.
+        ".validate": "$code.matches(/^[A-HJ-NP-Z2-9]{8}$/) && newData.hasChildren(['schoolId', 'schoolName', 'role', 'createdBy', 'createdAt', 'expiresAt']) && (data.exists() || newData.parent().parent().child('schools').child(newData.child('schoolId').val()).child('inviteList').child($code).exists())",
+        "schoolId": { ".validate": "newData.isString() && newData.val().length <= 40 && (!data.exists() || newData.val() === data.val())" },
+        // Must be the school's real name, so a code can't show a fake one.
+        "schoolName": { ".validate": "newData.isString() && ((data.exists() && newData.val() === data.val()) || (!data.exists() && newData.val() === root.child('schools').child(newData.parent().child('schoolId').val()).child('profile').child('name').val()))" },
+        "role": { ".validate": "newData.isString() && ((data.exists() && newData.val() === data.val()) || (!data.exists() && (newData.val() === 'teacher' || newData.val() === 'parentStudent')))" },
+        // Teacher invites only: an existing teacher record not yet linked.
+        "linkedTeacherId": { ".validate": "newData.isString() && ((data.exists() && newData.val() === data.val()) || (!data.exists() && newData.parent().child('role').val() === 'teacher' && root.child('schools').child(newData.parent().child('schoolId').val()).child('teachers').child(newData.val()).exists() && !root.child('schools').child(newData.parent().child('schoolId').val()).child('teachers').child(newData.val()).child('linkedUid').exists()))" },
+        // Parent invites only: { studentId: true } for existing students.
+        "linkedStudentIds": {
+          ".validate": "newData.parent().child('role').val() === 'parentStudent'",
+          "$studentId": { ".validate": "newData.val() === true && (data.exists() || root.child('schools').child(newData.parent().parent().child('schoolId').val()).child('students').child($studentId).exists())" }
+        },
+        "createdBy": { ".validate": "newData.isString() && ((data.exists() && newData.val() === data.val()) || (!data.exists() && newData.val() === auth.uid))" },
+        "createdAt": { ".validate": "newData.isNumber() && ((data.exists() && newData.val() === data.val()) || (!data.exists() && newData.val() === now))" },
+        // 7 days, computed on the admin's phone: in the future and at most
+        // 7 days + 5 minutes after server time.
+        "expiresAt": { ".validate": "newData.isNumber() && ((data.exists() && newData.val() === data.val()) || (!data.exists() && newData.val() > now && newData.val() <= now + 605100000))" },
+        // JOIN: the joiner marks the code used, once, before it expires, and
+        // only while creating their membership with this code.
+        "usedBy": {
+          ".write": "auth != null && !data.exists() && newData.val() === auth.uid && root.child('invites').child($code).child('expiresAt').val() > now && newData.parent().parent().parent().child('schools').child(root.child('invites').child($code).child('schoolId').val()).child('members').child(auth.uid).child('inviteCode').val() === $code",
+          ".validate": "newData.isString() && (newData.val() === data.val() || newData.val() === auth.uid)"
+        },
+        "usedAt": {
+          ".write": "auth != null && !data.exists() && newData.parent().child('usedBy').val() === auth.uid",
+          ".validate": "newData.isNumber() && (newData.val() === data.val() || newData.val() === now)"
+        },
         "$other": { ".validate": false }
       }
     },
@@ -75,14 +125,59 @@
           ".read": "auth != null && root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin'",
           "$uid": {
             ".read": "auth != null && auth.uid === $uid",
-            // Admins manage members, but the owner can't be removed or demoted.
-            ".write": "auth != null && root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin' && ($uid !== root.child('schools').child($sid).child('ownerUid').val() || newData.child('role').val() === 'schoolAdmin')",
+            // Two ways to write a membership:
+            //  ADMIN: change another member's role or remove them - never the
+            //    owner, never yourself. Removing must also remove parentLinks.
+            //  JOIN: create YOUR OWN membership with an invite code, in ONE
+            //    update that also marks the code used (invites + inviteList),
+            //    sets users/{uid}.schoolId to this school, and writes exactly
+            //    the invite's parentLinks / teacher link. The code must belong
+            //    to this school, be unused and unexpired, and the role must be
+            //    the invite's role.
+            ".write": "auth != null && ((root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin' && $uid !== auth.uid && $uid !== root.child('schools').child($sid).child('ownerUid').val() && (newData.exists() || !newData.parent().parent().child('parentLinks').child($uid).exists())) || ($uid === auth.uid && !data.exists() && newData.child('inviteCode').isString() && root.child('invites').child(newData.child('inviteCode').val()).child('schoolId').val() === $sid && root.child('invites').child(newData.child('inviteCode').val()).child('role').val() === newData.child('role').val() && !root.child('invites').child(newData.child('inviteCode').val()).child('usedBy').exists() && root.child('invites').child(newData.child('inviteCode').val()).child('expiresAt').val() > now && newData.parent().parent().parent().parent().child('invites').child(newData.child('inviteCode').val()).child('usedBy').val() === auth.uid && newData.parent().parent().child('inviteList').child(newData.child('inviteCode').val()).child('usedBy').val() === auth.uid && newData.parent().parent().parent().parent().child('users').child(auth.uid).child('schoolId').val() === $sid && newData.parent().parent().child('parentLinks').child(auth.uid).numChildren() === root.child('invites').child(newData.child('inviteCode').val()).child('linkedStudentIds').numChildren() && newData.child('linkedStudentIds').numChildren() === root.child('invites').child(newData.child('inviteCode').val()).child('linkedStudentIds').numChildren() && (!root.child('invites').child(newData.child('inviteCode').val()).child('linkedTeacherId').exists() || newData.parent().parent().child('teachers').child(root.child('invites').child(newData.child('inviteCode').val()).child('linkedTeacherId').val()).child('linkedUid').val() === auth.uid)))",
             ".validate": "newData.hasChildren(['role'])",
             "role": { ".validate": "newData.isString() && (newData.val() === 'schoolAdmin' || newData.val() === 'teacher' || newData.val() === 'parentStudent')" },
             "displayName": { ".validate": "newData.isString() && newData.val().length <= 100" },
             "email": { ".validate": "newData.isString() && newData.val().length <= 120" },
-            "addedBy": { ".validate": "newData.isString() && (newData.val() === data.val() || newData.val() === auth.uid)" },
+            // Set by an admin (themselves) or, when joining, the invite's creator.
+            "addedBy": { ".validate": "newData.isString() && (newData.val() === data.val() || newData.val() === auth.uid || newData.val() === root.child('invites').child(newData.parent().child('inviteCode').val()).child('createdBy').val())" },
             "addedAt": { ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === now) || newData.val() === data.val())" },
+            "inviteCode": { ".validate": "newData.isString() && newData.val().matches(/^[A-HJ-NP-Z2-9]{8}$/) && (!data.exists() || newData.val() === data.val())" },
+            // Mirrors parentLinks/{uid}: every key must be there too.
+            "linkedStudentIds": {
+              "$studentId": { ".validate": "newData.val() === true && newData.parent().parent().parent().parent().child('parentLinks').child($uid).child($studentId).exists()" }
+            },
+            "$other": { ".validate": false }
+          }
+        },
+
+        // Which students a parent account may see (Phase 3 parent portal).
+        "parentLinks": {
+          ".read": "auth != null && root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin'",
+          "$uid": {
+            ".read": "auth != null && auth.uid === $uid",
+            // An admin manages links; a joiner writes their own once, while
+            // joining with an invite (the JOIN rule checks the count).
+            ".write": "auth != null && (root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin' || ($uid === auth.uid && !data.exists() && !root.child('schools').child($sid).child('members').child(auth.uid).exists() && newData.parent().parent().child('members').child(auth.uid).child('inviteCode').isString()))",
+            "$studentId": { ".validate": "newData.val() === true && root.child('schools').child($sid).child('students').child($studentId).exists() && (root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin' || root.child('invites').child(newData.parent().parent().parent().child('members').child($uid).child('inviteCode').val()).child('linkedStudentIds').child($studentId).exists())" }
+          }
+        },
+
+        // The school's own list of invite codes, for the admin screens.
+        "inviteList": {
+          ".read": "auth != null && root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin'",
+          "$code": {
+            // Admin creates (with invites/{code}) or deletes; no edits.
+            ".write": "auth != null && root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin' && (!data.exists() || !newData.exists())",
+            ".validate": "newData.hasChildren(['role', 'createdAt', 'expiresAt']) && newData.parent().parent().parent().parent().child('invites').child($code).child('schoolId').val() === $sid",
+            "role": { ".validate": "newData.isString() && newData.val() === newData.parent().parent().parent().parent().parent().child('invites').child($code).child('role').val()" },
+            "createdAt": { ".validate": "newData.isNumber() && ((data.exists() && newData.val() === data.val()) || (!data.exists() && newData.val() === now))" },
+            "expiresAt": { ".validate": "newData.isNumber() && newData.val() === newData.parent().parent().parent().parent().parent().child('invites').child($code).child('expiresAt').val()" },
+            // JOIN: set once by the joiner, together with invites/{code}/usedBy.
+            "usedBy": {
+              ".write": "auth != null && !data.exists() && newData.val() === auth.uid && newData.parent().parent().parent().parent().parent().child('invites').child($code).child('usedBy').val() === auth.uid",
+              ".validate": "newData.isString()"
+            },
             "$other": { ".validate": false }
           }
         },
@@ -210,7 +305,12 @@
             "employmentType": { ".validate": "newData.isString() && (newData.val() === 'full_time' || newData.val() === 'part_time' || newData.val() === 'contract')" },
             "status": { ".validate": "newData.isString() && (newData.val() === 'active' || newData.val() === 'inactive')" },
             "photoUrl": { ".validate": "newData.isString() && newData.val().length <= 500 && (newData.val() === '' || newData.val().beginsWith('https://'))" },
-            "linkedUid": { ".validate": "newData.isString() && newData.val().length <= 128" },
+            // JOIN: a teacher joining with an invite that names this record
+            // links it to their login (admins can change it via the record).
+            "linkedUid": {
+              ".write": "auth != null && !data.exists() && newData.val() === auth.uid && !root.child('schools').child($sid).child('members').child(auth.uid).exists() && root.child('invites').child(newData.parent().parent().parent().child('members').child(auth.uid).child('inviteCode').val()).child('linkedTeacherId').val() === $teacherId",
+              ".validate": "newData.isString() && newData.val().length <= 128"
+            },
             "createdAt": { ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === now) || newData.val() === data.val())" },
             "$other": { ".validate": false }
           }

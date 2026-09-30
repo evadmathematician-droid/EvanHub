@@ -8,6 +8,7 @@ class Routes {
   static const noAccess = '/no-access';
   static const upgrade = '/upgrade';
   static const parentPortal = '/parent';
+  static const join = '/join';
 
   static const dashboard = '/dashboard';
 

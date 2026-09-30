@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../app/routes.dart';
 import '../../models/school.dart';
 import '../../services/auth_service.dart';
 import '../../state/auth_controller.dart';
@@ -109,7 +111,18 @@ class _SchoolOnboardingScreenState extends State<SchoolOnboardingScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Register your school')),
+      appBar: AppBar(
+        title: const Text('Register your school'),
+        actions: [
+          // Joining an existing school instead of creating one.
+          TextButton.icon(
+            onPressed: _busy ? null : () => context.push(Routes.join),
+            style: TextButton.styleFrom(foregroundColor: Colors.white),
+            icon: const Icon(Icons.vpn_key_outlined),
+            label: const Text('Invite code'),
+          ),
+        ],
+      ),
       body: Stepper(
         currentStep: _step,
         onStepContinue: _busy ? null : _next,
