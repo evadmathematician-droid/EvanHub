@@ -35,7 +35,7 @@ class _EvangelistGlobalAppState extends State<EvangelistGlobalApp> {
     return ChangeNotifierProvider<AuthController>.value(
       value: _auth,
       child: MaterialApp.router(
-        title: 'Evangelist Global',
+        title: 'EvanHub',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.light,
         routerConfig: _router,

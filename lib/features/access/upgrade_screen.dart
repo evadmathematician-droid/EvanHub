@@ -89,7 +89,7 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
     return GateLayout(
       icon: Icons.system_update_alt,
       title: 'Update school data',
-      message: 'Evangelist Global now keeps private details (dates of birth, '
+      message: 'EvanHub now keeps private details (dates of birth, '
           'guardian contacts, exam records, teacher NINs …) in protected '
           'sections. This one-time update moves your existing records there. '
           'It is all-or-nothing: if anything fails, nothing is changed.\n\n'

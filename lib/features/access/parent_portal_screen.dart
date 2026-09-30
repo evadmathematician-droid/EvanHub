@@ -16,7 +16,7 @@ class ParentPortalScreen extends StatelessWidget {
       icon: Icons.family_restroom,
       title: 'Parent portal coming soon',
       message: 'You are signed in as ${auth.appUser?.email ?? ''}. The parent '
-          'and student area of Evangelist Global is being built. Your school '
+          'and student area of EvanHub is being built. Your school '
           'will let you know when it is ready.',
       children: [
         OutlinedButton.icon(

@@ -1,6 +1,6 @@
 {
-    "name": "evangelistglobal",
-    "short_name": "evangelistglobal",
+    "name": "EvanHub",
+    "short_name": "EvanHub",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

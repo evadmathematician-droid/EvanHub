@@ -18,7 +18,7 @@ class SplashScreen extends StatelessWidget {
             Icon(Icons.school, color: Colors.white, size: 64),
             SizedBox(height: 16),
             Text(
-              'Evangelist Global',
+              'EvanHub',
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 22,
