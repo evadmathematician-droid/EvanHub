@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../app/routes.dart';
+import '../../models/user_role.dart';
 import '../../state/auth_controller.dart';
 
 class MoreScreen extends StatelessWidget {
@@ -14,6 +15,9 @@ class MoreScreen extends StatelessWidget {
 
     final items = <_MoreItem>[
       _MoreItem('Classes', Icons.class_outlined, Routes.classes),
+      // The database rules let only school admins write promotions.
+      if (auth.role == UserRole.schoolAdmin)
+        _MoreItem('Promotion', Icons.trending_up, Routes.promote),
       _MoreItem('Documents', Icons.folder_outlined, Routes.documents),
       _MoreItem('Announcements', Icons.campaign_outlined, Routes.announcements),
       _MoreItem('Settings', Icons.settings_outlined, Routes.settings),
