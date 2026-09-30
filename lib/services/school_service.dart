@@ -100,6 +100,12 @@ class SchoolService {
     return controller.stream;
   }
 
+  /// The school's name, for headings on printed / exported lists.
+  Future<String> schoolName(String schoolId) async {
+    final snapshot = await _db.ref('schools/$schoolId/profile/name').get();
+    return (snapshot.value ?? '').toString();
+  }
+
   Future<void> updateMeta(String schoolId, SchoolMeta meta) {
     return _db.ref('schools/$schoolId/profile').set({
       ...meta.toMap(),

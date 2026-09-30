@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import '../../models/school_document.dart';
 import '../../services/document_service.dart';
+import '../../services/file_actions.dart';
 import '../../state/auth_controller.dart';
 import '../../widgets/delete_helpers.dart';
 import '../../widgets/status_views.dart';
@@ -19,6 +20,39 @@ class DocumentsScreen extends StatefulWidget {
 
 class _DocumentsScreenState extends State<DocumentsScreen> {
   bool _uploading = false;
+
+  /// Documents being downloaded for Open / Download.
+  final Set<String> _fetching = {};
+
+  /// Title plus the file's extension from its URL, e.g. "Timetable.pdf".
+  String _fileName(SchoolDocument d) {
+    final path = Uri.tryParse(d.downloadUrl)?.pathSegments.lastOrNull ?? '';
+    final dot = path.lastIndexOf('.');
+    final ext = dot < 0 ? '' : path.substring(dot).toLowerCase();
+    final title = d.title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '').trim();
+    final base = title.isEmpty ? 'document' : title;
+    return base.toLowerCase().endsWith(ext) ? base : '$base$ext';
+  }
+
+  /// Downloads [d], then opens it in the phone's app for its type or lets
+  /// the user save it (e.g. to Downloads).
+  Future<void> _fetch(SchoolDocument d, {required bool save}) async {
+    if (_fetching.contains(d.id)) return;
+    setState(() => _fetching.add(d.id));
+    try {
+      final bytes = await FileActions.download(d.downloadUrl);
+      final name = _fileName(d);
+      if (save) {
+        if (await FileActions.save(name, bytes)) _snack('Saved $name');
+      } else {
+        await FileActions.open(name, bytes);
+      }
+    } catch (e) {
+      _snack(e is FileActionException ? e.message : 'Could not get the file: $e');
+    } finally {
+      if (mounted) setState(() => _fetching.remove(d.id));
+    }
+  }
 
   Future<void> _pickAndUpload() async {
     final auth = context.read<AuthController>();
@@ -125,22 +159,61 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
         stream: service.watchAll(),
         emptyMessage: 'No documents uploaded yet.',
         emptyIcon: Icons.folder_open,
-        itemBuilder: (context, d) => Card(
-          child: ListTile(
-            leading: const Icon(Icons.description_outlined),
-            title: Text(d.title),
-            subtitle: Text('${d.category}  •  ${_size(d.sizeBytes)}'),
-            // The uploader or an admin may delete (database rules).
-            trailing: canUpload &&
-                    (auth.isAdmin || d.uploadedBy == auth.appUser?.uid)
-                ? IconButton(
-                    icon: const Icon(Icons.delete_outline),
-                    tooltip: 'Delete document',
-                    onPressed: () => _delete(service, d),
-                  )
-                : null,
-          ),
-        ),
+        itemBuilder: (context, d) {
+          // The uploader or an admin may delete (database rules).
+          final canDelete = canUpload &&
+              (auth.isAdmin || d.uploadedBy == auth.appUser?.uid);
+          final busy = _fetching.contains(d.id);
+          return Card(
+            child: ListTile(
+              leading: busy
+                  ? const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.description_outlined),
+              title: Text(d.title),
+              subtitle: Text('${d.category}  •  ${_size(d.sizeBytes)}'),
+              onTap: busy ? null : () => _fetch(d, save: false),
+              trailing: PopupMenuButton<String>(
+                tooltip: 'Document options',
+                enabled: !busy,
+                onSelected: (action) => switch (action) {
+                  'open' => _fetch(d, save: false),
+                  'download' => _fetch(d, save: true),
+                  _ => _delete(service, d),
+                },
+                itemBuilder: (_) => [
+                  const PopupMenuItem(
+                    value: 'open',
+                    child: ListTile(
+                      leading: Icon(Icons.open_in_new),
+                      title: Text('Open'),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'download',
+                    child: ListTile(
+                      leading: Icon(Icons.download_outlined),
+                      title: Text('Download'),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                  if (canDelete)
+                    const PopupMenuItem(
+                      value: 'delete',
+                      child: ListTile(
+                        leading: Icon(Icons.delete_outline),
+                        title: Text('Delete'),
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }
