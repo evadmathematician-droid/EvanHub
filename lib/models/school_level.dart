@@ -51,11 +51,12 @@ enum SchoolLevel {
     return -1;
   }
 
-  /// The usual class ladder for this level, in promotion order.
+  /// The usual class ladder for this level, in promotion order. Nursery
+  /// (pre-primary) is Pre 1 and Pre 2; primary is Class 1–6 and is where a
+  /// school without a nursery starts. See `PromotionPath` for where each
+  /// ladder leads.
   List<StandardClass> get standardClasses => switch (this) {
         SchoolLevel.prePrimary => const [
-            StandardClass('Nursery 1'),
-            StandardClass('Nursery 2'),
             StandardClass('Pre 1'),
             StandardClass('Pre 2'),
           ],

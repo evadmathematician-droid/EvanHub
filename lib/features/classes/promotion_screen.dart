@@ -2,8 +2,8 @@
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../../models/promotion_path.dart';
 import '../../models/school_class.dart';
-import '../../models/school_level.dart';
 import '../../models/user_role.dart';
 import '../../services/class_service.dart';
 import '../../services/promotion_service.dart';
@@ -20,42 +20,6 @@ class PromotionScreen extends StatefulWidget {
   State<PromotionScreen> createState() => _PromotionScreenState();
 }
 
-/// What promoting a class means, based on the standard class ladder.
-enum _Outcome { promote, graduate, notInLadder }
-
-class _Plan {
-  const _Plan(this.outcome, {this.level, this.rung = -1});
-
-  final _Outcome outcome;
-
-  /// Target level and ladder position; set only for [_Outcome.promote].
-  final SchoolLevel? level;
-  final int rung;
-
-  StandardClass get next => level!.standardClasses[rung];
-
-  /// True for classes at the target rung (including sections like "JSS 2 B").
-  bool isTarget(SchoolClass c) =>
-      c.level == level && level!.rungOf(c.name) == rung;
-
-  /// Pupils in [from] go to the next class in its level's ladder. Pre-primary
-  /// has no leaving exam, so Pre 2 moves up to Primary Class 1; the final
-  /// Primary and Secondary classes (Class 6, SSS 3) graduate.
-  static _Plan of(SchoolClass from) {
-    final level = from.level;
-    final rung = level?.rungOf(from.name) ?? -1;
-    if (level == null || rung < 0) return const _Plan(_Outcome.notInLadder);
-    if (rung < level.standardClasses.length - 1) {
-      return _Plan(_Outcome.promote, level: level, rung: rung + 1);
-    }
-    if (level == SchoolLevel.prePrimary) {
-      return const _Plan(_Outcome.promote,
-          level: SchoolLevel.primary, rung: 0);
-    }
-    return const _Plan(_Outcome.graduate);
-  }
-}
-
 class _PromotionScreenState extends State<PromotionScreen> {
   String? _fromClassId;
   String? _toClassId;
@@ -69,29 +33,22 @@ class _PromotionScreenState extends State<PromotionScreen> {
     super.dispose();
   }
 
-  Future<void> _run(SchoolClass from, _Plan plan, String? toClassId) async {
-    final graduate = plan.outcome == _Outcome.graduate;
+  Future<void> _run(
+      SchoolClass from, PromotionPath path, String? toClassId) async {
+    final graduate = path.graduates;
     if (!graduate && toClassId == null) return;
     final auth = context.read<AuthController>();
     final service = PromotionService(auth.tenant!);
-
-    // JSS 3 to SSS 1 (as in the Ninka app): every pupil needs a BECE record
-    // before they can move up, so collect any that are missing first.
-    final requireBece = !graduate &&
-        from.level == SchoolLevel.secondary &&
-        plan.next.stage == SecondaryStage.senior &&
-        from.level!.standardClasses[plan.rung - 1].stage ==
-            SecondaryStage.junior;
-    // Graduating SSS 3 needs each pupil's WASSCE record.
-    final requireWassce = graduate && from.level == SchoolLevel.secondary;
 
     setState(() {
       _busy = true;
       _message = null;
     });
     try {
+      // JSS 3 to SSS 1 (as in the Ninka app): every pupil needs a BECE record
+      // before they can move up, so collect any that are missing first.
       var bece = <String, BeceRecord>{};
-      if (requireBece) {
+      if (path.needsBece(from)) {
         final missing = await service.activeStudentsMissingBece(from.id);
         if (missing.isNotEmpty) {
           if (!mounted) return;
@@ -113,8 +70,6 @@ class _PromotionScreenState extends State<PromotionScreen> {
         toClassId: graduate ? null : toClassId,
         academicYear: _year.text.trim(),
         promotedBy: auth.appUser?.uid ?? '',
-        requireBece: requireBece,
-        requireWassce: requireWassce,
         bece: bece,
       );
       setState(() => _message = [
@@ -164,17 +119,17 @@ class _PromotionScreenState extends State<PromotionScreen> {
           for (final c in classes) {
             if (c.id == _fromClassId) from = c;
           }
-          final plan = from == null ? null : _Plan.of(from);
-          final targets = plan?.outcome == _Outcome.promote
-              ? classes.where(plan!.isTarget).toList()
-              : const <SchoolClass>[];
+          final path = from == null ? null : PromotionPath.of(from, classes);
+          final targets = path == null || path.graduates
+              ? const <SchoolClass>[]
+              : classes.where(path.isTarget).toList();
           // Keep the choice only while it is still a valid target; pick the
           // target automatically when there is just one.
           final toClassId = targets.any((c) => c.id == _toClassId)
               ? _toClassId
               : (targets.length == 1 ? targets.first.id : null);
-          final canRun = from != null &&
-              (plan!.outcome == _Outcome.graduate || toClassId != null);
+          final canRun =
+              path != null && (path.graduates || toClassId != null);
 
           return ListView(
             padding: const EdgeInsets.all(16),
@@ -194,31 +149,33 @@ class _PromotionScreenState extends State<PromotionScreen> {
               ),
               const SizedBox(height: 12),
               if (from != null)
-                switch (plan!.outcome) {
-                  _Outcome.notInLadder => _Note(
+                switch (path) {
+                  null => _Note(
                       from.level == null
                           ? '${from.name} has no level set. Edit it under '
                               'Classes before promoting.'
                           : '${from.name} is not a standard class name '
-                              '(e.g. JSS 1, Class 3), so its next class is '
-                              'unknown. Rename it under Classes to promote it.',
+                              '(e.g. Pre 1, Class 3, JSS 1), so its next '
+                              'class is unknown. Rename it under Classes to '
+                              'promote it.',
                       warning: true,
                     ),
-                  _Outcome.graduate => _Note(
-                      '${from.name} is the final class. Its active students '
-                      'will be marked as graduated.'),
-                  _Outcome.promote when targets.isEmpty => _Note(
-                      'There is no ${plan.next.name} class yet. Add it under '
+                  PromotionPath(graduates: true) => _Note(
+                      '${from.name} is the last class this school runs. Its '
+                      'active students will be marked as graduated and show '
+                      'under Past.'),
+                  final p when targets.isEmpty => _Note(
+                      'There is no ${p.next.name} class yet. Add it under '
                       'Classes first.',
                       warning: true,
                     ),
-                  _Outcome.promote => DropdownButtonFormField<String>(
+                  final p => DropdownButtonFormField<String>(
                       // Re-key per From class so the field never holds a
                       // value that is missing from its items.
                       key: ValueKey('to-${from.id}'),
                       initialValue: toClassId,
                       decoration: InputDecoration(
-                        labelText: 'To class (${plan.next.name})',
+                        labelText: 'To class (${p.next.name})',
                       ),
                       items: targets
                           .map((c) => DropdownMenuItem(
@@ -243,7 +200,7 @@ class _PromotionScreenState extends State<PromotionScreen> {
               ElevatedButton(
                 onPressed: (_busy || !canRun)
                     ? null
-                    : () => _run(from!, plan, toClassId),
+                    : () => _run(from!, path, toClassId),
                 child: _busy
                     ? const SizedBox(
                         height: 18,
@@ -251,7 +208,7 @@ class _PromotionScreenState extends State<PromotionScreen> {
                         child: CircularProgressIndicator(
                             strokeWidth: 2, color: Colors.white),
                       )
-                    : Text(plan?.outcome == _Outcome.graduate
+                    : Text(path?.graduates == true
                         ? 'Graduate students'
                         : 'Run promotion'),
               ),
