@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../app/routes.dart';
+import '../../core/person_name.dart';
 import '../../models/school_class.dart';
 import '../../models/school_level.dart';
 import '../../models/student.dart';
@@ -294,9 +295,9 @@ class _StudentFormScreenState extends State<StudentFormScreen> {
       final student = Student(
         id: widget.existing?.id ?? '',
         admissionNo: _admissionNo.text.trim(),
-        firstName: _firstName.text.trim(),
-        middleName: _middleName.text.trim(),
-        lastName: _lastName.text.trim(),
+        firstName: titleCaseName(_firstName.text),
+        middleName: titleCaseName(_middleName.text),
+        lastName: titleCaseName(_lastName.text),
         gender: _gender,
         dob: _dob,
         level: level,
@@ -304,7 +305,7 @@ class _StudentFormScreenState extends State<StudentFormScreen> {
         department: _needsDepartment ? _department : null,
         admissionYear: _admissionYear.text.trim(),
         address: _address.text.trim(),
-        guardianName: _guardianName.text.trim(),
+        guardianName: titleCaseName(_guardianName.text),
         guardianPhone: _guardianPhone.text.trim(),
         // Only exams that can apply to the class are kept; others are cleared.
         npseId: _keepExam(_Exam.npse) ? id(_Exam.npse) : '',
@@ -425,6 +426,8 @@ class _StudentFormScreenState extends State<StudentFormScreen> {
             TextFormField(
               controller: _firstName,
               maxLength: 60,
+              textCapitalization: TextCapitalization.words,
+              inputFormatters: nameInputFormatters,
               decoration: const InputDecoration(
                   labelText: 'First name *', counterText: ''),
               validator: _required,
@@ -433,6 +436,8 @@ class _StudentFormScreenState extends State<StudentFormScreen> {
             TextFormField(
               controller: _middleName,
               maxLength: 60,
+              textCapitalization: TextCapitalization.words,
+              inputFormatters: nameInputFormatters,
               decoration: const InputDecoration(
                   labelText: 'Middle name (optional)', counterText: ''),
             ),
@@ -440,6 +445,8 @@ class _StudentFormScreenState extends State<StudentFormScreen> {
             TextFormField(
               controller: _lastName,
               maxLength: 60,
+              textCapitalization: TextCapitalization.words,
+              inputFormatters: nameInputFormatters,
               decoration: const InputDecoration(
                   labelText: 'Last name *', counterText: ''),
               validator: _required,
@@ -592,6 +599,8 @@ class _StudentFormScreenState extends State<StudentFormScreen> {
             TextFormField(
               controller: _guardianName,
               maxLength: 100,
+              textCapitalization: TextCapitalization.words,
+              inputFormatters: nameInputFormatters,
               decoration: const InputDecoration(
                   labelText: 'Guardian name', counterText: ''),
             ),

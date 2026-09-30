@@ -295,6 +295,7 @@
             ".write": "auth != null && root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin' && (newData.exists() || !newData.parent().parent().child('teacherPrivate').child($teacherId).exists())",
             ".validate": "newData.hasChildren(['firstName', 'lastName', 'status', 'createdAt'])",
             "firstName": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 60" },
+            "middleName": { ".validate": "newData.isString() && newData.val().length <= 60" },
             "lastName": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 60" },
             "gender": { ".validate": "newData.isString() && (newData.val() === '' || newData.val() === 'Male' || newData.val() === 'Female')" },
             "subjects": {

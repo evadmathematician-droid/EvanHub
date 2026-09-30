@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/person_name.dart';
 import '../../models/school_level.dart';
 import '../../models/teacher.dart';
 import '../../services/cloudinary_service.dart';
@@ -31,6 +32,7 @@ class _TeacherFormScreenState extends State<TeacherFormScreen> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nin;
   late final TextEditingController _firstName;
+  late final TextEditingController _middleName;
   late final TextEditingController _lastName;
   late final TextEditingController _email;
   late final TextEditingController _phone;
@@ -71,6 +73,7 @@ class _TeacherFormScreenState extends State<TeacherFormScreen> {
     final t = widget.existing;
     _nin = TextEditingController(text: t?.nin ?? '');
     _firstName = TextEditingController(text: t?.firstName ?? '');
+    _middleName = TextEditingController(text: t?.middleName ?? '');
     _lastName = TextEditingController(text: t?.lastName ?? '');
     _email = TextEditingController(text: t?.email ?? '');
     _phone = TextEditingController(text: t?.phone ?? '');
@@ -126,6 +129,7 @@ class _TeacherFormScreenState extends State<TeacherFormScreen> {
     for (final c in [
       _nin,
       _firstName,
+      _middleName,
       _lastName,
       _email,
       _phone,
@@ -275,8 +279,9 @@ class _TeacherFormScreenState extends State<TeacherFormScreen> {
           _loaded ?? const Teacher(id: '', firstName: '', lastName: '');
       final teacher = base.copyWith(
         nin: nin,
-        firstName: _firstName.text.trim(),
-        lastName: _lastName.text.trim(),
+        firstName: titleCaseName(_firstName.text),
+        middleName: titleCaseName(_middleName.text),
+        lastName: titleCaseName(_lastName.text),
         email: _email.text.trim(),
         phone: _phone.text.trim(),
         gender: _gender,
@@ -425,14 +430,31 @@ class _TeacherFormScreenState extends State<TeacherFormScreen> {
             TextFormField(
               controller: _firstName,
               maxLength: 60,
+              textCapitalization: TextCapitalization.words,
+              inputFormatters: nameInputFormatters,
               decoration: const InputDecoration(
                   labelText: 'First name *', counterText: ''),
               validator: _required,
             ),
             const SizedBox(height: 12),
             TextFormField(
+              controller: _middleName,
+              maxLength: 60,
+              textCapitalization: TextCapitalization.words,
+              inputFormatters: nameInputFormatters,
+              decoration: const InputDecoration(
+                labelText: 'Middle name (optional)',
+                helperText: 'Up to two words, e.g. Abu Bakarr',
+                counterText: '',
+              ),
+              validator: middleNameProblem,
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
               controller: _lastName,
               maxLength: 60,
+              textCapitalization: TextCapitalization.words,
+              inputFormatters: nameInputFormatters,
               decoration: const InputDecoration(
                   labelText: 'Last name *', counterText: ''),
               validator: _required,

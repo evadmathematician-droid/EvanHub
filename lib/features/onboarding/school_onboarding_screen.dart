@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../app/routes.dart';
+import '../../core/person_name.dart';
 import '../../models/school.dart';
 import '../../services/auth_service.dart';
 import '../../state/auth_controller.dart';
@@ -71,7 +72,7 @@ class _SchoolOnboardingScreenState extends State<SchoolOnboardingScreen> {
     });
     try {
       await context.read<AuthController>().onboardNewSchool(
-            adminName: _adminName.text.trim(),
+            adminName: titleCaseName(_adminName.text),
             adminEmail: _adminEmail.text.trim(),
             adminPassword: _adminPassword.text,
             meta: SchoolMeta(
@@ -205,6 +206,8 @@ class _SchoolOnboardingScreenState extends State<SchoolOnboardingScreen> {
                       children: [
                         TextFormField(
                           controller: _adminName,
+                          textCapitalization: TextCapitalization.words,
+                          inputFormatters: nameInputFormatters,
                           decoration: const InputDecoration(
                               labelText: 'Your full name *'),
                           validator: (v) => (v == null || v.trim().isEmpty)

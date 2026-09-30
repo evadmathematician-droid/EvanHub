@@ -48,6 +48,9 @@ class TeacherDocument {
 class Teacher {
   final String id;
   final String firstName;
+
+  /// Optional, up to two words (e.g. "Abu Bakarr").
+  final String middleName;
   final String lastName;
   final String email;
   final String phone;
@@ -80,6 +83,7 @@ class Teacher {
     required this.id,
     required this.firstName,
     required this.lastName,
+    this.middleName = '',
     this.email = '',
     this.phone = '',
     this.subjects = const [],
@@ -102,7 +106,9 @@ class Teacher {
     this.documents = const [],
   });
 
-  String get fullName => '$firstName $lastName'.trim();
+  String get fullName => [firstName, middleName, lastName]
+      .where((p) => p.trim().isNotEmpty)
+      .join(' ');
 
   /// Builds a teacher from its public and private halves. Passing the same
   /// map twice reads a pre-Phase-1 record that held every field in one place.
@@ -116,6 +122,7 @@ class Teacher {
     return Teacher(
       id: id,
       firstName: s('firstName'),
+      middleName: s('middleName'),
       lastName: s('lastName'),
       gender: s('gender'),
       subjects:
@@ -155,6 +162,7 @@ class Teacher {
   /// `teachers/{id}` — readable by admins and teachers.
   Map<String, dynamic> toPublicMap() => {
         'firstName': firstName,
+        'middleName': middleName,
         'lastName': lastName,
         'gender': gender,
         'subjects': subjects,
@@ -186,6 +194,7 @@ class Teacher {
 
   Teacher copyWith({
     String? firstName,
+    String? middleName,
     String? lastName,
     String? email,
     String? phone,
@@ -210,6 +219,7 @@ class Teacher {
       Teacher(
         id: id,
         firstName: firstName ?? this.firstName,
+        middleName: middleName ?? this.middleName,
         lastName: lastName ?? this.lastName,
         email: email ?? this.email,
         phone: phone ?? this.phone,
