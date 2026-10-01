@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/foundation.dart';
 
+import '../core/login_timer.dart';
 import '../core/rtdb.dart';
 import '../core/tenant/tenant_refs.dart';
 import '../models/app_user.dart';
@@ -86,6 +87,7 @@ class AuthController extends ChangeNotifier {
     await _stopMemberWatch();
     _userDocSub = null;
     _firebaseUser = user;
+    LoginTimer.mark('auth state changed (signed in: ${user != null})');
 
     if (user == null) {
       _appUser = null;
@@ -95,6 +97,7 @@ class AuthController extends ChangeNotifier {
 
     _userDocSub = _db.ref('users/${user.uid}').onValue.listen(
       (event) {
+        LoginTimer.mark('users/{uid} record loaded');
         final data = event.snapshot.exists ? asMap(event.snapshot.value) : null;
         final schoolId = data?['schoolId'] as String?;
         if (schoolId == null || schoolId.isEmpty) {
@@ -109,7 +112,8 @@ class AuthController extends ChangeNotifier {
           _watchMember(user, schoolId, data!);
         }
       },
-      onError: (_) {
+      onError: (Object e) {
+        LoginTimer.mark('users/{uid} read FAILED: $e');
         _appUser = AppUser(uid: user.uid, email: user.email ?? '');
         _set(AuthStatus.needsOnboarding);
       },
@@ -131,6 +135,7 @@ class AuthController extends ChangeNotifier {
 
     _memberSub = _db.ref('schools/$schoolId/members/${user.uid}').onValue.listen(
       (event) async {
+        LoginTimer.mark('member record loaded');
         if (!event.snapshot.exists) {
           _appUser = build(UserRole.parentStudent);
           _set(AuthStatus.noAccess);
@@ -139,7 +144,8 @@ class AuthController extends ChangeNotifier {
         _appUser = build(UserRole.fromWire(asMap(event.snapshot.value)['role']));
         await recheckSchool();
       },
-      onError: (_) {
+      onError: (Object e) {
+        LoginTimer.mark('member read FAILED: $e');
         _appUser = build(UserRole.parentStudent);
         _set(AuthStatus.noAccess);
       },
@@ -163,8 +169,10 @@ class AuthController extends ChangeNotifier {
     }
     try {
       final profile = await refs.profile.get();
+      LoginTimer.mark('school profile loaded, opening the school');
       _set(profile.exists ? AuthStatus.ready : AuthStatus.upgradeRequired);
-    } catch (_) {
+    } catch (e) {
+      LoginTimer.mark('school profile read FAILED: $e');
       _set(AuthStatus.noAccess);
     }
   }

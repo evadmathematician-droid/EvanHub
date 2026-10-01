@@ -77,7 +77,7 @@ class _ClassesListScreenState extends State<ClassesListScreen> {
             ),
           if (canPromote)
             IconButton(
-              tooltip: 'Promote a class',
+              tooltip: 'Promotion',
               onPressed: () => context.push(Routes.promote),
               icon: const Icon(Icons.trending_up),
             ),

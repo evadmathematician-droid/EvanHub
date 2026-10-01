@@ -30,6 +30,17 @@ class PromotionPath {
   bool isTarget(SchoolClass c) =>
       !graduates && c.level == level && level!.rungOf(c.name) == rung;
 
+  /// Where [from]'s pupils go unless the admin picks otherwise: the only
+  /// target class, or the one with the same section ("JSS 1 A" →
+  /// "JSS 2 A"). Null when there is no target or the choice is unclear.
+  SchoolClass? defaultTarget(SchoolClass from, Iterable<SchoolClass> classes) {
+    final targets = classes.where(isTarget).toList();
+    if (targets.length == 1) return targets.single;
+    final same =
+        targets.where((t) => sectionOf(t) == sectionOf(from)).toList();
+    return same.length == 1 ? same.single : null;
+  }
+
   /// The path out of [from], given all of the school's [classes]. Null when
   /// [from] has no level or a non-standard name, so its next class is unknown.
   static PromotionPath? of(SchoolClass from, Iterable<SchoolClass> classes) {
@@ -66,6 +77,17 @@ class PromotionPath {
       graduates &&
       from.level == SchoolLevel.secondary &&
       _stageOf(from) == SecondaryStage.senior;
+
+  /// The section part of a class name after its standard name, ignoring case
+  /// and spaces: "JSS 1 A" → "a", "JSS 1" → "". Empty for non-standard names.
+  static String sectionOf(SchoolClass c) {
+    final level = c.level;
+    final rung = level?.rungOf(c.name) ?? -1;
+    if (level == null || rung < 0) return '';
+    String squash(String s) => s.replaceAll(RegExp(r'\s+'), '').toLowerCase();
+    return squash(c.name)
+        .substring(squash(level.standardClasses[rung].name).length);
+  }
 
   static SecondaryStage? _stageOf(SchoolClass c) {
     final rung = SchoolLevel.secondary.rungOf(c.name);

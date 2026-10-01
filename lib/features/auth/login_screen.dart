@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../app/routes.dart';
 import '../../services/auth_service.dart';
+import '../../core/login_timer.dart';
 import '../../state/auth_controller.dart';
 import '../../theme/app_colors.dart';
 
@@ -35,10 +36,12 @@ class _LoginScreenState extends State<LoginScreen> {
       _error = null;
     });
     try {
+      LoginTimer.start();
       await context.read<AuthController>().signIn(
             email: _email.text,
             password: _password.text,
           );
+      LoginTimer.mark('Firebase sign-in finished');
       // Router redirect handles navigation on success.
     } on AuthException catch (e) {
       setState(() => _error = e.message);

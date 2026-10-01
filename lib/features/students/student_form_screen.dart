@@ -317,6 +317,7 @@ class _StudentFormScreenState extends State<StudentFormScreen> {
         photoUrl: _photoUrl,
         status: _status,
         createdAt: widget.existing?.createdAt,
+        lastPromotedAt: widget.existing?.lastPromotedAt,
       );
       await service.save(
         student,

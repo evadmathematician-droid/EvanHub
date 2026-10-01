@@ -14,15 +14,18 @@ import '../../state/auth_controller.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/export_button.dart';
 import '../../widgets/photo_avatar.dart';
+import '../../widgets/repeater_badge.dart';
 import '../../widgets/status_views.dart';
 import 'student_filters.dart';
 
 /// Students, filtered by class and status with a count on every choice.
-/// The filter panel at the top has two rows:
+/// The filter panel at the top has:
 ///  1. Active | Past (tap the selected one again to show both) and the
 ///     Print button (PDF, Word or Excel of exactly what is listed);
 ///  2. the class chips (All | JSS 1 | JSS 2 | …), led by a level picker when
-///     the school runs more than one level.
+///     the school runs more than one level;
+///  3. for SSS 1–3, the stream chips (Science | Commercial | Arts).
+/// Pupils not promoted for 10 months show in red as "Repeater".
 /// Each row's counts follow the other row's choice, so "Class 4 (30)" with
 /// Active selected means 30 active pupils in Class 4.
 class StudentsListScreen extends StatefulWidget {
@@ -45,6 +48,9 @@ class _StudentsListScreenState extends State<StudentsListScreen> {
 
   /// Null = all classes in the level.
   int? _rung;
+
+  /// SSS department; null = every stream, '' = no department recorded.
+  String? _stream;
 
   /// Null = active and past.
   StatusFilter? _status = StatusFilter.active;
@@ -106,7 +112,12 @@ class _StudentsListScreenState extends State<StudentsListScreen> {
         : f.levels.firstOrNull;
     final rung =
         level != null && f.rungsOf(level).contains(_rung) ? _rung : null;
-    final shown = f.where(level: level, rung: rung, status: _status);
+    final senior = StudentFilters.isSenior(level, rung);
+    final stream = senior ? _stream : null;
+    final shown =
+        f.where(level: level, rung: rung, status: _status, department: stream);
+    int streamCount(String? d) =>
+        f.count(level: level, rung: rung, status: _status, department: d);
 
     Future<ExportTable> buildTable() async => ExportTable(
           schoolName: await _schoolName,
@@ -117,6 +128,7 @@ class _StudentsListScreenState extends State<StudentsListScreen> {
               level.standardClasses[rung].name
             else
               'All classes',
+            if (stream != null) stream.isEmpty ? 'No department' : stream,
             _status?.label ?? 'Active and past',
           ],
           columns: const [
@@ -149,7 +161,7 @@ class _StudentsListScreenState extends State<StudentsListScreen> {
               children: [
                 Row(
                   children: [
-                    Expanded(child: _statusSwitch(f, level, rung)),
+                    Expanded(child: _statusSwitch(f, level, rung, stream)),
                     const SizedBox(width: 8),
                     ExportButton(buildTable: buildTable),
                   ],
@@ -163,17 +175,41 @@ class _StudentsListScreenState extends State<StudentsListScreen> {
                       if (multiLevel) _levelPicker(f, level),
                       if (level != null && f.rungsOf(level).isNotEmpty) ...[
                         _chip('All', f.count(level: level, status: _status),
-                            rung == null, () => _rung = null),
+                            rung == null, () {
+                          _rung = null;
+                          _stream = null;
+                        }),
                         for (final r in f.rungsOf(level))
                           _chip(
                               level.standardClasses[r].name,
                               f.count(level: level, rung: r, status: _status),
-                              rung == r,
-                              () => _rung = r),
+                              rung == r, () {
+                            _rung = r;
+                            _stream = null;
+                          }),
                       ],
                     ],
                   ),
                 ),
+                if (senior) ...[
+                  const SizedBox(height: 6),
+                  SizedBox(
+                    height: 32,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      children: [
+                        _chip('All streams', streamCount(null), stream == null,
+                            () => _stream = null),
+                        for (final d in kDepartments)
+                          _chip(d, streamCount(d), stream == d,
+                              () => _stream = d),
+                        if (streamCount('') > 0)
+                          _chip('No department', streamCount(''),
+                              stream == '', () => _stream = ''),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -196,14 +232,15 @@ class _StudentsListScreenState extends State<StudentsListScreen> {
 
   /// Active | Past as one compact switch. Tapping the selected side again
   /// clears it and shows both.
-  Widget _statusSwitch(StudentFilters f, SchoolLevel? level, int? rung) =>
+  Widget _statusSwitch(StudentFilters f, SchoolLevel? level, int? rung,
+          String? stream) =>
       SegmentedButton<StatusFilter>(
         segments: [
           for (final s in StatusFilter.values)
             ButtonSegment(
               value: s,
               label: Text(
-                '${s.label} (${f.count(level: level, rung: rung, status: s)})',
+                '${s.label} (${f.count(level: level, rung: rung, status: s, department: stream)})',
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -230,6 +267,7 @@ class _StudentsListScreenState extends State<StudentsListScreen> {
           onSelected: (l) => setState(() {
             _level = l;
             _rung = null;
+            _stream = null;
           }),
           itemBuilder: (_) => [
             PopupMenuItem(
@@ -289,9 +327,22 @@ class _StudentsListScreenState extends State<StudentsListScreen> {
       Card(
         child: ListTile(
           leading: PhotoAvatar(url: s.photoUrl, title: s.fullName),
-          title: Text(s.fullName),
+          title: s.isRepeater()
+              ? Row(
+                  children: [
+                    Flexible(
+                      child: Text(s.fullName,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: AppColors.danger)),
+                    ),
+                    const SizedBox(width: 6),
+                    const RepeaterBadge(),
+                  ],
+                )
+              : Text(s.fullName),
           subtitle: Text([
             if (schoolClass != null) schoolClass.name,
+            if ((s.department ?? '').isNotEmpty) s.department!,
             if (s.admissionNo.isNotEmpty) 'Adm ${s.admissionNo}',
             if (s.gender.isNotEmpty) s.gender,
             StudentStatus.label(s.status),

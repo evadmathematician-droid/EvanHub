@@ -63,26 +63,46 @@ class StudentFilters {
     return c == null || level == null ? -1 : level.rungOf(c.name);
   }
 
+  /// True for SSS 1–3, where pupils belong to a department.
+  static bool isSenior(SchoolLevel? level, int? rung) =>
+      level == SchoolLevel.secondary &&
+      rung != null &&
+      level!.standardClasses[rung].stage == SecondaryStage.senior;
+
   /// [level] null = every level, [rung] null = every class in the level,
-  /// [status] null = active and past.
+  /// [status] null = active and past, [department] null = every department
+  /// ('' = pupils with no department recorded).
   bool matches(
     Student s, {
     SchoolLevel? level,
     int? rung,
     StatusFilter? status,
+    String? department,
   }) =>
       (level == null || levelOf(s) == level) &&
       (rung == null || rungOf(s) == rung) &&
-      (status == null || status.matches(s));
+      (status == null || status.matches(s)) &&
+      (department == null || (s.department ?? '') == department);
 
-  List<Student> where({SchoolLevel? level, int? rung, StatusFilter? status}) =>
+  List<Student> where({
+    SchoolLevel? level,
+    int? rung,
+    StatusFilter? status,
+    String? department,
+  }) =>
       [
         for (final s in students)
-          if (matches(s, level: level, rung: rung, status: status)) s,
+          if (matches(s,
+              level: level, rung: rung, status: status, department: department))
+            s,
       ];
 
-  int count({SchoolLevel? level, int? rung, StatusFilter? status}) =>
-      students
-          .where((s) => matches(s, level: level, rung: rung, status: status))
+  int count({
+    SchoolLevel? level,
+    int? rung,
+    StatusFilter? status,
+    String? department,
+  }) =>
+      where(level: level, rung: rung, status: status, department: department)
           .length;
 }

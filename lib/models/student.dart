@@ -59,6 +59,10 @@ class Student {
   final String status; // see [StudentStatus]
   final DateTime? createdAt;
 
+  /// When the student last moved up a class (or graduated). Null until
+  /// their first promotion.
+  final DateTime? lastPromotedAt;
+
   const Student({
     required this.id,
     required this.firstName,
@@ -83,11 +87,31 @@ class Student {
     this.photoUrl = '',
     this.status = StudentStatus.active,
     this.createdAt,
+    this.lastPromotedAt,
   });
 
   String get fullName => [firstName, middleName, lastName]
       .where((p) => p.trim().isNotEmpty)
       .join(' ');
+
+  /// How long a pupil may go without promotion before they count as a
+  /// repeater. A school year promotes once, so 10 months without a move means
+  /// the last promotion passed them by.
+  static const repeaterMonths = 10;
+
+  /// When the repeater clock started: the last promotion, or registration
+  /// for a pupil never promoted.
+  DateTime? get inClassSince => lastPromotedAt ?? createdAt;
+
+  /// An active pupil with no promotion for [repeaterMonths] months. Shown in
+  /// red as "Repeater"; nothing about it is stored.
+  bool isRepeater([DateTime? now]) {
+    final since = inClassSince;
+    if (status != StudentStatus.active || since == null) return false;
+    final n = now ?? DateTime.now();
+    final cutoff = DateTime(n.year, n.month - repeaterMonths, n.day);
+    return !since.isAfter(cutoff);
+  }
 
   /// Builds a student from its public and private halves. Passing the same
   /// map twice reads a pre-Phase-1 record that held every field in one place.
@@ -112,6 +136,7 @@ class Student {
       photoUrl: s('photoUrl'),
       status: (public['status'] ?? StudentStatus.active) as String,
       createdAt: fromMillis(public['createdAt']),
+      lastPromotedAt: fromMillis(public['lastPromotedAt']),
       dob: fromMillis(private['dob']),
       address: p('address'),
       guardianName: p('guardianName'),
@@ -148,6 +173,8 @@ class Student {
         'photoUrl': photoUrl,
         'createdAt':
             createdAt == null ? ServerValue.timestamp : toMillis(createdAt),
+        // Kept as is when the record is edited; promotion sets it.
+        'lastPromotedAt': toMillis(lastPromotedAt),
       };
 
   /// `studentPrivate/{id}` — personal details and exam records.
