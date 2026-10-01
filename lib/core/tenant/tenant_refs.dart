@@ -33,6 +33,10 @@ class TenantRefs {
   DatabaseReference get announcements => school.child('announcements');
   DatabaseReference get events => school.child('events');
   DatabaseReference get promotions => school.child('promotions');
+  DatabaseReference get settings => school.child('settings');
+
+  /// Salted hash of the password that guards deleting school history.
+  DatabaseReference get deletePassword => settings.child('deletePassword');
 
   /// `index/admissionNo/{indexKey}` → studentId.
   DatabaseReference get admissionIndex => school.child('index/admissionNo');

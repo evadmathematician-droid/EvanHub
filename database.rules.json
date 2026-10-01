@@ -121,6 +121,25 @@
           "$other": { ".validate": false }
         },
 
+        "settings": {
+          ".read": "auth != null && root.child('schools').child($sid).child('members').child(auth.uid).exists()",
+          // Password that guards deleting school history: salted SHA-256, never
+          // the plain text. Admins/teachers may create it ONCE; it cannot be
+          // changed or removed from the app - the developer resets it by
+          // deleting the node in the Firebase console.
+          "deletePassword": {
+            ".write": "auth != null && !data.exists() && newData.exists() && (root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin' || root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'teacher')",
+            ".validate": "newData.hasChildren(['hash', 'salt', 'algorithm', 'createdBy', 'createdAt'])",
+            "hash": { ".validate": "newData.isString() && newData.val().length === 64" },
+            "salt": { ".validate": "newData.isString() && newData.val().length >= 16 && newData.val().length <= 64" },
+            "algorithm": { ".validate": "newData.val() === 'sha256'" },
+            "createdBy": { ".validate": "newData.val() === auth.uid" },
+            "createdAt": { ".validate": "newData.isNumber() && newData.val() <= now" },
+            "$other": { ".validate": false }
+          },
+          "$other": { ".validate": false }
+        },
+
         "members": {
           ".read": "auth != null && root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin'",
           "$uid": {
@@ -265,6 +284,8 @@
             "status": { ".validate": "newData.isString() && (newData.val() === 'active' || newData.val() === 'graduated' || newData.val() === 'inactive' || newData.val() === 'transferred')" },
             "photoUrl": { ".validate": "newData.isString() && newData.val().length <= 500 && (newData.val() === '' || newData.val().beginsWith('https://'))" },
             "createdAt": { ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === now) || newData.val() === data.val())" },
+            // Set by promotion to the server time; otherwise only kept as is.
+            "lastPromotedAt": { ".validate": "newData.isNumber() && (newData.val() === now || newData.val() === data.val())" },
             "$other": { ".validate": false }
           }
         },

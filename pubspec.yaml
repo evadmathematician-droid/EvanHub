@@ -38,6 +38,12 @@ dependencies:
   share_plus: ^13.3.0
   path_provider: ^2.1.6
   open_filex: ^4.7.0
+  hive_ce: ^2.20.1
+  hive_ce_flutter: ^2.3.4
+  connectivity_plus: ^7.3.1
+  flutter_image_compress: ^2.5.1
+  crypto: ^3.0.7
+  url_launcher: ^6.3.2
 
 dev_dependencies:
   flutter_test:

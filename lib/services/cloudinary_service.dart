@@ -25,19 +25,24 @@ class CloudinaryService {
 
   final http.Client _http;
 
+  /// Uploads [bytes] into [folder]. When [publicId] is given, the asset gets
+  /// that fixed name, so uploading the same item again (a retry) returns the
+  /// existing asset instead of creating a duplicate.
   Future<CloudinaryUpload> upload({
     required Uint8List bytes,
     required String fileName,
     required String folder,
+    String? publicId,
   }) async {
     final uri = Uri.parse(
       'https://api.cloudinary.com/v1_1/${CloudinaryConfig.cloudName}/auto/upload',
     );
     final request = http.MultipartRequest('POST', uri)
       ..fields['upload_preset'] = CloudinaryConfig.uploadPreset
-      ..fields['folder'] = folder
-      ..files.add(
-          http.MultipartFile.fromBytes('file', bytes, filename: fileName));
+      ..fields['folder'] = folder;
+    if (publicId != null) request.fields['public_id'] = publicId;
+    request.files.add(
+        http.MultipartFile.fromBytes('file', bytes, filename: fileName));
 
     final response = await http.Response.fromStream(await _http.send(request));
     final body = jsonDecode(response.body) as Map<String, dynamic>;

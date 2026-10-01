@@ -116,11 +116,10 @@ class _SchoolHeroState extends State<SchoolHero> {
                       ? CachedNetworkImage(
                           imageUrl: cloudinaryResized(logo, width: 200),
                           fit: BoxFit.cover,
-                          errorWidget: (_, _, _) => const Icon(Icons.school,
-                              color: AppColors.primary, size: 30),
+                          placeholder: (_, _) => _LogoFallback(name: name),
+                          errorWidget: (_, _, _) => _LogoFallback(name: name),
                         )
-                      : const Icon(Icons.school,
-                          color: AppColors.primary, size: 30),
+                      : _LogoFallback(name: name),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -190,6 +189,43 @@ class _SchoolHeroState extends State<SchoolHero> {
                     ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// Shown in the badge circle while the logo loads, when there is none, or when
+/// it fails: the school's initials (e.g. "EP"), or a school icon.
+class _LogoFallback extends StatelessWidget {
+  const _LogoFallback({required this.name});
+
+  final String name;
+
+  static String initialsOf(String name) {
+    final words = name
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((w) => w.isNotEmpty && RegExp(r'[A-Za-z0-9]').hasMatch(w[0]))
+        .toList();
+    return words.take(2).map((w) => w[0].toUpperCase()).join();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final initials = name == 'Your school' ? '' : initialsOf(name);
+    return ColoredBox(
+      color: Colors.white,
+      child: Center(
+        child: initials.isEmpty
+            ? const Icon(Icons.school, color: AppColors.primary, size: 30)
+            : Text(
+                initials,
+                style: const TextStyle(
+                  color: AppColors.primary,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
       ),
     );
   }

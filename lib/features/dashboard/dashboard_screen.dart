@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/login_timer.dart';
 import '../../models/school.dart';
 import '../../services/school_service.dart';
 import '../../services/stats_service.dart';
@@ -19,19 +22,40 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   late Future<SchoolStats> _statsFuture;
-  late final Stream<School> _school;
+
+  /// The school profile, followed here for the life of the screen. It must
+  /// NOT be a StreamBuilder inside the ListView: the list disposes the banner
+  /// when it scrolls off-screen, and the rebuilt StreamBuilder would listen to
+  /// the same single-subscription stream again ("Stream has already been
+  /// listened to"), replacing the banner with an error box.
+  StreamSubscription<School>? _schoolSub;
+  School? _school;
 
   @override
   void initState() {
     super.initState();
     _statsFuture = _loadStats();
-    _school = SchoolService()
-        .streamSchool(context.read<AuthController>().schoolId!);
+    _schoolSub = SchoolService()
+        .streamSchool(context.read<AuthController>().schoolId!)
+        .listen(
+          (school) {
+            if (mounted) setState(() => _school = school);
+          },
+          onError: (Object e) => debugPrint('School profile failed: $e'),
+        );
+  }
+
+  @override
+  void dispose() {
+    _schoolSub?.cancel();
+    super.dispose();
   }
 
   Future<SchoolStats> _loadStats() {
     final refs = context.read<AuthController>().tenant!;
-    return StatsService(refs).load();
+    return StatsService(refs)
+        .load()
+        .whenComplete(() => LoginTimer.finish('dashboard numbers loaded'));
   }
 
   @override
@@ -47,12 +71,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           padding: EdgeInsets.zero,
           children: [
             // Profile banner runs edge to edge; the rest is padded below.
-            StreamBuilder<School>(
-              stream: _school,
-              builder: (context, snapshot) => SchoolHero(
-                school: snapshot.data,
-              ),
-            ),
+            SchoolHero(school: _school),
             Padding(
               padding: const EdgeInsets.all(16),
               child: _content(),
