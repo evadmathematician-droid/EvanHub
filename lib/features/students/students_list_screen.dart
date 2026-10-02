@@ -20,8 +20,9 @@ import 'student_filters.dart';
 
 /// Students, filtered by class and status with a count on every choice.
 /// The filter panel at the top has:
-///  1. Active | Past (tap the selected one again to show both) and the
-///     Print button (PDF, Word or Excel of exactly what is listed);
+///  1. Active | Past (tap the selected one again to show both), the Sort
+///     button (name, ID, class or date of registration) and the Print
+///     button (PDF, Word or Excel of exactly what is listed, in that order);
 ///  2. the class chips (All | JSS 1 | JSS 2 | …), led by a level picker when
 ///     the school runs more than one level;
 ///  3. for SSS 1–3, the stream chips (Science | Commercial | Arts).
@@ -54,6 +55,8 @@ class _StudentsListScreenState extends State<StudentsListScreen> {
 
   /// Null = active and past.
   StatusFilter? _status = StatusFilter.active;
+
+  StudentSort _sort = StudentSort.name;
 
   @override
   void initState() {
@@ -114,8 +117,9 @@ class _StudentsListScreenState extends State<StudentsListScreen> {
         level != null && f.rungsOf(level).contains(_rung) ? _rung : null;
     final senior = StudentFilters.isSenior(level, rung);
     final stream = senior ? _stream : null;
-    final shown =
-        f.where(level: level, rung: rung, status: _status, department: stream);
+    final shown = f.sorted(
+        f.where(level: level, rung: rung, status: _status, department: stream),
+        _sort);
     int streamCount(String? d) =>
         f.count(level: level, rung: rung, status: _status, department: d);
 
@@ -162,6 +166,8 @@ class _StudentsListScreenState extends State<StudentsListScreen> {
                 Row(
                   children: [
                     Expanded(child: _statusSwitch(f, level, rung, stream)),
+                    const SizedBox(width: 8),
+                    _sortButton(),
                     const SizedBox(width: 8),
                     ExportButton(buildTable: buildTable),
                   ],
@@ -257,6 +263,33 @@ class _StudentsListScreenState extends State<StudentsListScreen> {
         ),
         onSelectionChanged: (s) =>
             setState(() => _status = s.isEmpty ? null : s.first),
+      );
+
+  /// "Sort ▾": Name | ID | Class | Date of registration. The chosen one is
+  /// ticked; the list and the printed file both follow it.
+  Widget _sortButton() => MenuAnchor(
+        alignmentOffset: const Offset(0, 4),
+        menuChildren: [
+          for (final s in StudentSort.values)
+            MenuItemButton(
+              leadingIcon: Icon(s.icon, size: 20),
+              trailingIcon: s == _sort
+                  ? const Icon(Icons.check, size: 18, color: AppColors.primary)
+                  : null,
+              onPressed: () => setState(() => _sort = s),
+              child: Text(s.label),
+            ),
+        ],
+        builder: (context, menu, _) => FilledButton.tonalIcon(
+          style: FilledButton.styleFrom(
+            visualDensity: VisualDensity.compact,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+          onPressed: () => menu.isOpen ? menu.close() : menu.open(),
+          icon: const Icon(Icons.sort, size: 18),
+          label: const Text('Sort'),
+        ),
       );
 
   /// "All levels ▾" / "Primary ▾" at the front of the class row.
