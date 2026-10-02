@@ -61,6 +61,8 @@ flutter:
 
   assets:
     - assets/images/
+    # Logo on the mandatory-update screen (lib/force_update).
+    - assets/icon/app_icon.png
 
 # App icon. Source: assets/icon/profile.jpeg (the EvanHub logo), converted to
 # 1024x1024 PNGs. Regenerate with: dart run flutter_launcher_icons

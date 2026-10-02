@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../force_update/force_update_gate.dart';
 import '../services/event_sync_service.dart';
 import '../services/pending_event_store.dart';
 import '../state/auth_controller.dart';
@@ -59,6 +60,13 @@ class _EvangelistGlobalAppState extends State<EvangelistGlobalApp> {
         theme: AppTheme.light,
         scaffoldMessengerKey: _messengerKey,
         routerConfig: _router,
+        // Mandatory-update check runs before any app screen is built; an
+        // outdated build only ever sees the update screen.
+        builder: (context, child) => ForceUpdateGate(
+          logo: const ResizeImage(AssetImage('assets/icon/app_icon.png'),
+              width: 288),
+          child: child!,
+        ),
       ),
     );
   }
