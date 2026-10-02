@@ -34,6 +34,15 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+
+            // R8: shrink, optimize and obfuscate the Java/Kotlin code, and drop
+            // unused resources. Flutter's Gradle plugin already turns these on
+            // for release (with its own and the plugins' keep rules); stating
+            // them here keeps them on if that default ever changes. Google
+            // Play requires at least 25% DEX optimization coverage from
+            // February 2027.
+            isMinifyEnabled = true
+            isShrinkResources = true
         }
     }
 }
