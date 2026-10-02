@@ -44,6 +44,10 @@ dependencies:
   flutter_image_compress: ^2.5.1
   crypto: ^3.0.7
   url_launcher: ^6.3.2
+  firebase_remote_config: ^6.7.0
+  package_info_plus: ^10.2.2
+  shared_preferences: ^2.5.5
+  in_app_update: ^5.0.0
 
 dev_dependencies:
   flutter_test:
