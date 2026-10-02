@@ -1,6 +1,20 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
+import '../core/image_url.dart';
+
+/// A person's photo for a round avatar [radius] logical pixels wide: a small
+/// copy from Cloudinary, cached on disk, and decoded at the size it is shown
+/// instead of the full-resolution original.
+ImageProvider avatarImage(BuildContext context, String url,
+    {required double radius}) {
+  final px = (radius * 2 * MediaQuery.devicePixelRatioOf(context)).ceil();
+  return ResizeImage(
+    CachedNetworkImageProvider(cloudinaryResized(url, width: px)),
+    width: px,
+  );
+}
+
 /// Round photo for list rows. Tapping it opens the full-size photo; taps on
 /// the rest of the row are left to the row itself.
 class PhotoAvatar extends StatelessWidget {
@@ -21,7 +35,8 @@ class PhotoAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     final avatar = CircleAvatar(
       radius: radius,
-      backgroundImage: url.isEmpty ? null : CachedNetworkImageProvider(url),
+      backgroundImage:
+          url.isEmpty ? null : avatarImage(context, url, radius: radius),
       child: url.isEmpty ? const Icon(Icons.person) : null,
     );
     if (url.isEmpty) return avatar;
@@ -58,7 +73,9 @@ class PhotoViewer extends StatelessWidget {
         child: InteractiveViewer(
           maxScale: 5,
           child: CachedNetworkImage(
-            imageUrl: url,
+            // Sharp enough to zoom into, without decoding a 12-megapixel
+            // camera original (same size as event photos).
+            imageUrl: cloudinaryResized(url, width: 2000),
             fit: BoxFit.contain,
             placeholder: (_, _) =>
                 const CircularProgressIndicator(color: Colors.white),

@@ -12,6 +12,7 @@ import '../../services/teacher_service.dart';
 import '../../state/auth_controller.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/delete_helpers.dart';
+import '../../widgets/photo_avatar.dart';
 
 /// Teacher registration — mirrors the Ninka school app's teacher form (NIN,
 /// photo, gender, marital status, DOB, pincode, qualification, experience,
@@ -391,7 +392,9 @@ class _TeacherFormScreenState extends State<TeacherFormScreen> {
                     CircleAvatar(
                       radius: 44,
                       backgroundImage:
-                          _photoUrl.isEmpty ? null : NetworkImage(_photoUrl),
+                          _photoUrl.isEmpty
+                          ? null
+                          : avatarImage(context, _photoUrl, radius: 44),
                       child: _photoBusy
                           ? const CircularProgressIndicator()
                           : (_photoUrl.isEmpty

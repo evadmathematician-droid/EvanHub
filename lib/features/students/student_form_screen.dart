@@ -17,6 +17,7 @@ import '../../services/student_service.dart';
 import '../../state/auth_controller.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/delete_helpers.dart';
+import '../../widgets/photo_avatar.dart';
 
 /// Exams recorded on a student. Which ones show depends on the class and
 /// status (see `_exams`): NPSE, BECE (SSS only) and WASSCE (graduated SSS).
@@ -400,7 +401,9 @@ class _StudentFormScreenState extends State<StudentFormScreen> {
                     CircleAvatar(
                       radius: 44,
                       backgroundImage:
-                          _photoUrl.isEmpty ? null : NetworkImage(_photoUrl),
+                          _photoUrl.isEmpty
+                          ? null
+                          : avatarImage(context, _photoUrl, radius: 44),
                       child: _photoBusy
                           ? const CircularProgressIndicator()
                           : (_photoUrl.isEmpty

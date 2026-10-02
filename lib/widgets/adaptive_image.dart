@@ -35,6 +35,14 @@ class _AdaptiveImageState extends State<AdaptiveImage> {
   /// its final size at once instead of jumping from the placeholder.
   static final _knownRatios = <ImageProvider, double>{};
 
+  /// In-memory pictures (a photo picked for a new post) are not remembered:
+  /// the map key would keep the photo's bytes alive for as long as the app
+  /// runs.
+  static bool _rememberable(ImageProvider image) {
+    final inner = image is ResizeImage ? image.imageProvider : image;
+    return inner is! MemoryImage;
+  }
+
   ImageStream? _stream;
   ImageStreamListener? _listener;
   double? _ratio;
@@ -69,7 +77,7 @@ class _AdaptiveImageState extends State<AdaptiveImage> {
         info.dispose();
         if (w <= 0 || h <= 0) return;
         final ratio = w / h;
-        _knownRatios[widget.image] = ratio;
+        if (_rememberable(widget.image)) _knownRatios[widget.image] = ratio;
         if (mounted && ratio != _ratio) setState(() => _ratio = ratio);
       },
       onError: (error, _) {

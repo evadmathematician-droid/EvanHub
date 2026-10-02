@@ -150,7 +150,15 @@ class _SchoolEventsPanelState extends State<SchoolEventsPanel> {
                   date: p.createdAt,
                   image: p.imagePath.isEmpty
                       ? null
-                      : AdaptiveImage(image: FileImage(File(p.imagePath))),
+                      // Saved camera photos can be 4000px+ wide: decode a
+                      // screen-sized copy for the card and a zoomable one
+                      // for the full-screen view.
+                      : AdaptiveImage(
+                          image: ResizeImage(FileImage(File(p.imagePath)),
+                              width: 1080),
+                          fullImage: ResizeImage(FileImage(File(p.imagePath)),
+                              width: 2000),
+                        ),
                   pending: true,
                   onDelete: canDelete(p.authorUid)
                       ? () => _deletePending(p)
@@ -482,7 +490,7 @@ class _AddEventSheetState extends State<_AddEventSheet> {
               const SizedBox(height: 12),
               if (_imageBytes != null) ...[
                 AdaptiveImage(
-                  image: MemoryImage(_imageBytes!),
+                  image: ResizeImage(MemoryImage(_imageBytes!), width: 1080),
                   maxHeightFraction: 0.4,
                   enableFullScreen: false,
                 ),

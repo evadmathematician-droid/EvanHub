@@ -1,5 +1,4 @@
-import 'dart:typed_data';
-
+import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 
 import 'docx_export.dart';
@@ -83,9 +82,17 @@ class ExportTable {
     return '$base.${format.extension}';
   }
 
-  Future<Uint8List> build(ExportFormat format) async => switch (format) {
-        ExportFormat.pdf => await buildPdf(this),
-        ExportFormat.word => buildDocx(this),
-        ExportFormat.excel => buildXlsx(this),
-      };
+  /// Builds the file on a background isolate so a long list doesn't freeze
+  /// the screen (on web, where isolates aren't available, it runs inline).
+  Future<Uint8List> build(ExportFormat format) =>
+      compute(_buildExport, (this, format));
+}
+
+Future<Uint8List> _buildExport((ExportTable, ExportFormat) job) async {
+  final (table, format) = job;
+  return switch (format) {
+    ExportFormat.pdf => await buildPdf(table),
+    ExportFormat.word => buildDocx(table),
+    ExportFormat.excel => buildXlsx(table),
+  };
 }
