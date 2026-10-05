@@ -1,4 +1,4 @@
-# Evangelist Global
+# Evangelist Global (EvanHub)
 
 A multi-tenant school-management app built with Flutter. Every school gets an
 isolated `schools/{schoolId}` branch in the **Firebase Realtime Database**;
