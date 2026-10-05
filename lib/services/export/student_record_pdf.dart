@@ -5,6 +5,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../../models/student.dart';
+import 'student_record_content.dart';
 
 /// One line of a student's promotion history, already in words.
 class HistoryLine {
@@ -114,8 +115,6 @@ final _band = PdfColor.fromHex('#E8E9F6');
 final _line = PdfColor.fromHex('#C5C8D6');
 final _muted = PdfColor.fromHex('#5E6470');
 
-final _dateTime = DateFormat('d MMMM yyyy, h:mm a');
-final _short = DateFormat('d MMM yyyy');
 
 /// The built-in PDF font covers Latin-1 only; anything else would print as a
 /// blank box, so it is replaced with "?".
@@ -143,7 +142,7 @@ Future<Uint8List> buildStudentRecordPdf(StudentRecordData d) async {
   final badge = image(d.badge);
   final stamp = image(d.stamp);
   final photo = image(d.photo);
-  final exported = _safe(_dateTime.format(d.exportedAt));
+  final exported = _safe(exportedAtText(d));
   final reference = _safe(d.reference);
 
   doc.addPage(pw.MultiPage(
@@ -170,7 +169,7 @@ Future<Uint8List> buildStudentRecordPdf(StudentRecordData d) async {
       ..._sections(d),
       if (d.historyVisible && d.history.isNotEmpty) _history(d.history),
       pw.SizedBox(height: 4),
-      _certification(d, exported),
+      _certification(d),
       pw.SizedBox(height: 14),
       _authentication(d, stamp),
     ],
@@ -190,10 +189,7 @@ Future<Uint8List> buildStudentRecordPdfSafely(StudentRecordData d) async {
 }
 
 pw.Widget _letterhead(StudentRecordData d, pw.ImageProvider? badge) {
-  final contact = [
-    if (_has(d.schoolPhone)) 'Tel: ${d.schoolPhone.trim()}',
-    if (_has(d.schoolEmail)) 'Email: ${d.schoolEmail.trim()}',
-  ].join('   |   ');
+  final contact = contactLine(d);
   const side = 62.0;
   return pw.Column(
     children: [
@@ -323,10 +319,7 @@ pw.Widget _summary(StudentRecordData d, pw.ImageProvider? photo) {
                 style: pw.TextStyle(
                     fontSize: 15, fontWeight: pw.FontWeight.bold)),
             pw.SizedBox(height: 5),
-            if (_has(s.admissionNo)) line('Student ID', s.admissionNo),
-            if (_has(d.className)) line('Class', d.className),
-            line('Status', StudentStatus.label(s.status)),
-            if (s.level != null) line('Level', s.level!.label),
+            for (final (label, value) in recordSummary(d)) line(label, value),
           ],
         ),
       ),
@@ -346,53 +339,11 @@ pw.Widget _summary(StudentRecordData d, pw.ImageProvider? photo) {
   );
 }
 
-/// Every filled-in field, grouped as in the app's details popup. Empty
-/// fields — and sections left with nothing in them — are left out.
-List<pw.Widget> _sections(StudentRecordData d) {
-  final s = d.student;
-  final sections = <String, List<(String, String)>>{
-    'PERSONAL INFORMATION': [
-      ('First name', s.firstName),
-      ('Middle name', s.middleName),
-      ('Last name', s.lastName),
-      ('Gender', s.gender.isEmpty
-          ? ''
-          : s.gender[0].toUpperCase() + s.gender.substring(1)),
-      ('Date of birth', s.dob == null ? '' : _short.format(s.dob!)),
-      ('Home address', s.address),
-    ],
-    'GUARDIAN / CONTACT': [
-      ('Guardian name', s.guardianName),
-      ('Guardian phone', s.guardianPhone),
-    ],
-    'ACADEMIC INFORMATION': [
-      ('Student ID', s.admissionNo),
-      ('Level', s.level?.label ?? ''),
-      ('Class', d.className),
-      ('Department', s.department ?? ''),
-      ('Admission year', s.admissionYear),
-      ('Date registered',
-          s.createdAt == null ? '' : _short.format(s.createdAt!)),
-      ('Status', StudentStatus.label(s.status)),
-      ('Last promoted', s.lastPromotedAt == null
-          ? 'Not yet promoted'
-          : _short.format(s.lastPromotedAt!)),
-    ],
-    'EXAM RECORDS': [
-      ('NPSE index no.', s.npseId),
-      ('NPSE year', s.npseYear),
-      ('BECE index no.', s.beceId),
-      ('BECE year', s.beceYear),
-      ('WASSCE index no.', s.wassceId),
-      ('WASSCE year', s.wassceYear),
-    ],
-  };
-  return [
-    for (final MapEntry(key: title, value: rows) in sections.entries)
-      if (rows.any((r) => _has(r.$2)))
-        _section(title, rows.where((r) => _has(r.$2)).toList()),
-  ];
-}
+/// Every filled-in field, grouped as in the app's details popup (see
+/// [recordSections]).
+List<pw.Widget> _sections(StudentRecordData d) => [
+      for (final (title, rows) in recordSections(d)) _section(title, rows),
+    ];
 
 /// A banded heading, then label / value pairs two to a row.
 pw.Widget _section(String title, List<(String, String)> rows) {
@@ -459,16 +410,8 @@ pw.Widget _history(List<HistoryLine> history) {
   );
 }
 
-pw.Widget _certification(StudentRecordData d, String exported) {
-  final s = d.student;
-  final school = _has(d.schoolAddress)
-      ? '${d.schoolName.trim()}, ${d.schoolAddress.trim()}'
-      : d.schoolName.trim();
-  final id = _has(s.admissionNo) ? s.admissionNo.trim() : s.id;
-  final text = 'This is to certify that ${s.fullName}, Student ID $id, is a '
-      'bona fide student of $school. The information contained in this '
-      'document is true and correct according to the official records of '
-      'the school as at $exported.';
+pw.Widget _certification(StudentRecordData d) {
+  final text = certificationText(d);
   return pw.Container(
     padding: const pw.EdgeInsets.fromLTRB(10, 7, 10, 8),
     decoration: pw.BoxDecoration(

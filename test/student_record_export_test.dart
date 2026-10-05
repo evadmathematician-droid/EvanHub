@@ -1,9 +1,11 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:archive/archive.dart';
 import 'package:evangelistglobal/models/school_level.dart';
 import 'package:evangelistglobal/models/student.dart';
 import 'package:evangelistglobal/services/export/student_record_export.dart';
+import 'package:evangelistglobal/services/export/student_record_docx.dart';
 import 'package:evangelistglobal/services/export/student_record_pdf.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -93,5 +95,62 @@ void main() {
     final bytes = await buildStudentRecordPdfSafely(
         record(badge: Uint8List.fromList([1, 2, 3, 4])));
     expect(String.fromCharCodes(bytes.take(4)), '%PDF');
+  });
+
+  group('Word record', () {
+    String part(Archive zip, String name) =>
+        utf8.decode(zip.findFile(name)!.content as List<int>);
+
+    // Smallest valid PNG: 1×1 pixel.
+    final png = base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==');
+
+    test('has the document, footer and the same wording as the PDF', () {
+      final zip = ZipDecoder().decodeBytes(buildStudentRecordDocx(
+          record(history: [line(1)], motto: 'Knowledge is Light')));
+      final doc = part(zip, 'word/document.xml');
+      expect(doc, contains('EVANGELIST MODEL SCHOOL'));
+      expect(doc, contains('STUDENT INFORMATION RECORD'));
+      expect(doc, contains('Knowledge is Light'));
+      expect(doc, contains('This is to certify that Fatmata K. Kamara'));
+      expect(doc, contains('Head Teacher / Principal'));
+      expect(doc, contains('Mrs. A. Sesay'));
+      expect(doc, contains('PROMOTION HISTORY'));
+      // No stamp uploaded: the dashed box instead.
+      expect(doc, contains('Official Stamp'));
+      expect(part(zip, 'word/footer1.xml'),
+          contains('Ref: EMS-EG2024017-202610051430'));
+    });
+
+    test('empty fields are left out', () {
+      final doc = part(
+          ZipDecoder().decodeBytes(buildStudentRecordDocx(record())),
+          'word/document.xml');
+      expect(doc, isNot(contains('WASSCE')));
+      expect(doc, isNot(contains('PROMOTION HISTORY')));
+    });
+
+    test('badge, photo and stamp are embedded as pictures', () {
+      final zip = ZipDecoder().decodeBytes(buildStudentRecordDocx(
+          StudentRecordData(
+        student: student,
+        className: 'JSS 2',
+        schoolName: 'Evangelist Model School',
+        exportedAt: DateTime(2026, 10, 5),
+        history: const [],
+        badge: png,
+        photo: png,
+        stamp: png,
+      )));
+      expect(zip.files.where((f) => f.name.startsWith('word/media/')).length, 3);
+      expect(part(zip, 'word/_rels/document.xml.rels'), contains('media/image3.png'));
+      expect(part(zip, 'word/document.xml'), isNot(contains('Official Stamp')));
+    });
+
+    test('a corrupt image is simply left out', () {
+      final zip = ZipDecoder().decodeBytes(buildStudentRecordDocx(
+          record(badge: Uint8List.fromList([1, 2, 3, 4]))));
+      expect(zip.files.where((f) => f.name.startsWith('word/media/')), isEmpty);
+    });
   });
 }

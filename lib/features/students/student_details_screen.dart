@@ -96,48 +96,87 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen> {
   }
 
   Future<void> _chooseExport() async {
-    // Phones share through the system sheet; the web can only share in some
-    // browsers, so it says "download" where that is what happens.
-    final choice =
-        await showModalBottomSheet<(RecordFormat, RecordAction)>(
+    // Step 1: the format.
+    final format = await showModalBottomSheet<RecordFormat>(
       context: context,
       showDragHandle: true,
       builder: (context) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ListTile(
-              leading: const Icon(Icons.share_outlined,
-                  color: AppColors.primary),
-              title: const Text('Share PDF'),
-              subtitle: Text(kIsWeb
-                  ? 'Share from the browser, or download if it can\'t'
-                  : 'WhatsApp, Telegram, Gmail, Bluetooth, Drive …'),
-              onTap: () => Navigator.pop(
-                  context, (RecordFormat.pdf, RecordAction.share)),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 0, 16, 4),
+              child: Text('Export student record',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
             ),
             ListTile(
-              leading: const Icon(Icons.download_outlined,
+              leading: const Icon(Icons.picture_as_pdf_outlined,
                   color: AppColors.danger),
-              title: Text(kIsWeb ? 'Download PDF' : 'Save PDF to device'),
+              title: const Text('PDF'),
               subtitle: const Text('A4 record with school letterhead'),
-              onTap: () => Navigator.pop(
-                  context, (RecordFormat.pdf, RecordAction.save)),
+              onTap: () => Navigator.pop(context, RecordFormat.pdf),
+            ),
+            ListTile(
+              leading: const Icon(Icons.description_outlined,
+                  color: AppColors.info),
+              title: const Text('Word (.docx)'),
+              subtitle: const Text('The same record, editable in Word'),
+              onTap: () => Navigator.pop(context, RecordFormat.docx),
             ),
             ListTile(
               leading:
-                  const Icon(Icons.image_outlined, color: AppColors.info),
-              title: const Text('Share as image'),
-              subtitle: const Text('The same record as a PNG picture'),
-              onTap: () => Navigator.pop(
-                  context, (RecordFormat.png, RecordAction.share)),
+                  const Icon(Icons.image_outlined, color: AppColors.success),
+              title: const Text('Image (PNG)'),
+              subtitle: const Text('The same record as a picture'),
+              onTap: () => Navigator.pop(context, RecordFormat.png),
             ),
             const SizedBox(height: 8),
           ],
         ),
       ),
     );
-    if (choice != null) await _export(choice.$1, choice.$2);
+    if (format == null || !mounted) return;
+
+    // Step 2: share or save. Phones share through the system sheet; the web
+    // can only share in some browsers, so it says "download" where that is
+    // what happens.
+    final action = await showModalBottomSheet<RecordAction>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+              child: Text('${format.label} — what next?',
+                  style: const TextStyle(
+                      fontSize: 16, fontWeight: FontWeight.w800)),
+            ),
+            ListTile(
+              leading: const Icon(Icons.share_outlined,
+                  color: AppColors.primary),
+              title: const Text('Share'),
+              subtitle: Text(kIsWeb
+                  ? 'Share from the browser, or download if it can\'t'
+                  : 'WhatsApp, Telegram, Facebook, Gmail, Bluetooth, Drive …'),
+              onTap: () => Navigator.pop(context, RecordAction.share),
+            ),
+            ListTile(
+              leading: const Icon(Icons.download_outlined,
+                  color: AppColors.primary),
+              title: Text(kIsWeb ? 'Download' : 'Save to device'),
+              subtitle: Text(kIsWeb
+                  ? 'Saved to your Downloads folder'
+                  : 'Choose a folder (opens in Downloads)'),
+              onTap: () => Navigator.pop(context, RecordAction.save),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (action != null) await _export(format, action);
   }
 
   /// "Preparing document…" over the page while the record is built.
@@ -229,11 +268,13 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen> {
       final bytes = await StudentRecordExport.build(data, format);
       closePreparing();
       final name = StudentRecordExport.fileName(s, format);
-      final done =
+      final where =
           await StudentRecordExport.deliver(name, bytes, format, action);
-      if (done && action == RecordAction.save) {
+      if (action == RecordAction.save && where != null) {
         messenger.showSnackBar(SnackBar(
-            content: Text(kIsWeb ? 'Downloaded $name' : 'Saved $name')));
+          duration: const Duration(seconds: 6),
+          content: Text(kIsWeb ? 'Downloaded $name to $where' : 'Saved to $where'),
+        ));
       }
     } catch (e) {
       debugPrint('Student export failed: $e');

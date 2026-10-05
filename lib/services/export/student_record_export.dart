@@ -5,9 +5,22 @@ import 'package:printing/printing.dart';
 
 import '../../models/student.dart';
 import '../file_actions.dart';
+import 'student_record_docx.dart';
 import 'student_record_pdf.dart';
 
-enum RecordFormat { pdf, png }
+/// The formats a student record can be exported to. The names are the file
+/// extensions.
+enum RecordFormat {
+  pdf('PDF', 'application/pdf'),
+  docx('Word',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'),
+  png('Image (PNG)', 'image/png');
+
+  const RecordFormat(this.label, this.mimeType);
+
+  final String label;
+  final String mimeType;
+}
 
 /// What to do with the exported record.
 enum RecordAction {
@@ -15,15 +28,17 @@ enum RecordAction {
   /// On the web: the browser's share option where supported, else a download.
   share,
 
-  /// Save to the phone (the user picks the folder). On the web: a download.
+  /// Save to the phone's storage (the system "Save to" screen, which opens in
+  /// Downloads). On the web: a download.
   save,
 }
 
-/// Builds a student's record as a PDF or a PNG image and hands it over.
+/// Builds a student's record as a PDF, Word file or PNG image and hands it
+/// over. All three have the same content and layout.
 class StudentRecordExport {
   StudentRecordExport._();
 
-  /// `<StudentID>_<StudentName>_Record.pdf` (or `.png`): letters and digits
+  /// `<StudentID>_<StudentName>_Record.<pdf|docx|png>`: letters and digits
   /// only, words joined by `_`.
   static String fileName(Student s, RecordFormat format) {
     String clean(String v) => v
@@ -38,16 +53,29 @@ class StudentRecordExport {
 
   static Future<Uint8List> build(
       StudentRecordData data, RecordFormat format) async {
-    final pdf = await buildStudentRecordPdfSafely(data);
-    return format == RecordFormat.pdf ? pdf : _toPng(pdf);
+    switch (format) {
+      case RecordFormat.pdf:
+        return buildStudentRecordPdfSafely(data);
+      case RecordFormat.png:
+        return _toPng(await buildStudentRecordPdfSafely(data));
+      case RecordFormat.docx:
+        // As with the PDF, an unreadable picture never stops the export.
+        try {
+          return buildStudentRecordDocx(data);
+        } catch (_) {
+          return buildStudentRecordDocx(data.withoutImages());
+        }
+    }
   }
 
-  /// Shares or saves the file. Returns false when the user cancelled a save.
-  static Future<bool> deliver(String fileName, Uint8List bytes,
+  /// Shares or saves the file. For a save, returns where it went (see
+  /// [FileActions.saveAndLocate]), or null when the user cancelled; a share
+  /// returns an empty string.
+  static Future<String?> deliver(String fileName, Uint8List bytes,
       RecordFormat format, RecordAction action) async {
-    final mime = format == RecordFormat.pdf ? 'application/pdf' : 'image/png';
+    final mime = format.mimeType;
     if (action == RecordAction.save) {
-      return FileActions.save(fileName, bytes, mimeType: mime);
+      return FileActions.saveAndLocate(fileName, bytes, mimeType: mime);
     }
     if (kIsWeb) {
       // Not every browser can share files; those download it instead.
@@ -56,10 +84,10 @@ class StudentRecordExport {
       } catch (_) {
         await FileActions.save(fileName, bytes, mimeType: mime);
       }
-      return true;
+      return '';
     }
     await FileActions.share(fileName, bytes, mimeType: mime);
-    return true;
+    return '';
   }
 
   /// The PDF drawn as an image at print quality (150 dpi), so the PNG looks

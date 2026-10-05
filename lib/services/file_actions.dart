@@ -53,6 +53,37 @@ class FileActions {
     return saved != null || kIsWeb;
   }
 
+  /// Like [save], but says where the file went, in words a user can find:
+  /// e.g. "Download/EG_017_Record.pdf" (phone storage), or "your Downloads
+  /// folder" on the web. Null when the user cancels.
+  static Future<String?> saveAndLocate(String fileName, Uint8List bytes,
+      {String mimeType = 'application/octet-stream'}) async {
+    final saved = await FilePicker.saveFile(
+      fileName: fileName,
+      bytes: bytes,
+      mimeType: mimeType,
+      dialogTitle: 'Save $fileName',
+    );
+    if (kIsWeb) return 'your Downloads folder';
+    if (saved == null) return null;
+    return _readableLocation(saved, fileName);
+  }
+
+  /// Android hands back a "content://…" address; this turns the common ones
+  /// into a folder path a user recognises.
+  static String _readableLocation(Uri uri, String fileName) {
+    final text = Uri.decodeComponent(uri.toString());
+    // ".../document/primary:Download/x.pdf" → "Download/x.pdf".
+    final primary = RegExp(r'primary:(.+)$').firstMatch(text);
+    if (primary != null) return primary.group(1)!;
+    if (uri.scheme == 'file') {
+      // "/storage/emulated/0/Download/x.pdf" → "Download/x.pdf".
+      return uri.path.replaceFirst(RegExp(r'^/storage/emulated/\d+/'), '');
+    }
+    if (text.contains('downloads')) return 'Downloads/$fileName';
+    return 'the folder you chose ($fileName)';
+  }
+
   /// Opens the share sheet (WhatsApp, email, Drive …).
   static Future<void> share(String fileName, Uint8List bytes,
       {String? mimeType, String? text}) async {
