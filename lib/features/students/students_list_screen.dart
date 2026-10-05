@@ -1,13 +1,21 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../app/routes.dart';
+import '../../core/offline_write.dart';
+import '../../core/rtdb.dart';
+import '../../models/school.dart';
 import '../../models/school_class.dart';
 import '../../models/school_level.dart';
 import '../../models/student.dart';
 import '../../services/class_service.dart';
+import '../../services/export/export_images.dart';
 import '../../services/export/export_table.dart';
+import '../../services/file_actions.dart';
 import '../../services/school_service.dart';
 import '../../services/student_service.dart';
 import '../../state/auth_controller.dart';
@@ -123,36 +131,75 @@ class _StudentsListScreenState extends State<StudentsListScreen> {
     int streamCount(String? d) =>
         f.count(level: level, rung: rung, status: _status, department: d);
 
-    Future<ExportTable> buildTable() async => ExportTable(
-          schoolName: await _schoolName,
-          title: 'Students',
-          filters: [
-            if (multiLevel) level?.label ?? 'All levels',
-            if (level != null && rung != null)
-              level.standardClasses[rung].name
-            else
-              'All classes',
-            if (stream != null) stream.isEmpty ? 'No department' : stream,
-            _status?.label ?? 'Active and past',
-          ],
-          columns: const [
-            ExportColumn('Name', flex: 4),
-            ExportColumn('Admission no.', flex: 2),
-            ExportColumn('Class', flex: 2),
-            ExportColumn('Gender', flex: 1.5),
-            ExportColumn('Status', flex: 1.5),
-          ],
-          rows: [
-            for (final s in shown)
-              [
-                s.fullName,
-                s.admissionNo,
-                f.classOf(s)?.name ?? '',
-                s.gender,
-                StudentStatus.label(s.status),
-              ],
-          ],
-        );
+    // The full pupils register: every field of exactly the pupils shown
+    // (current filters and sort), the same columns in PDF, Excel and Word.
+    Future<ExportTable> buildTable() async {
+      // Runs on tap (not during build), always for the user's own school.
+      final refs = context.read<AuthController>().tenant!;
+      final className = level != null && rung != null
+          ? level.standardClasses[rung].name
+          : null;
+      // Private halves (date of birth, guardian, address, exams) from the
+      // phone's copy, so this works offline too.
+      final Map<String, dynamic> private;
+      final SchoolMeta meta;
+      try {
+        private = asMap((await readOnce(refs.studentPrivate)).value);
+        meta = SchoolMeta.fromMap(asMap((await readOnce(refs.profile)).value));
+      } on TimeoutException {
+        throw const FileActionException('The pupils\' details are not saved '
+            'on this phone yet. Connect to the internet once and try again.');
+      }
+      final logo = await ExportImages.load(ExportImages.badgeUrl(meta.logoUrl));
+      final date = DateFormat('dd/MM/yyyy');
+      String d(DateTime? v) => v == null ? '-' : date.format(v);
+      String t(String? v) => (v ?? '').trim().isEmpty ? '-' : v!.trim();
+
+      return ExportTable(
+        schoolName: meta.name.isNotEmpty ? meta.name : await _schoolName,
+        title: 'Pupils Register',
+        heading: 'Pupils Register - ${className ?? level?.label ?? 'All classes'}',
+        schoolAddress: meta.address,
+        logo: logo,
+        layout: ExportLayout.register,
+        filters: [
+          if (multiLevel) level?.label ?? 'All levels',
+          className ?? 'All classes',
+          if (stream != null) stream.isEmpty ? 'No department' : stream,
+          _status?.label ?? 'Active and past',
+        ],
+        columns: _registerColumns,
+        rows: [
+          for (final s in shown.map((s) =>
+              s.withPrivate(asMap(private[s.id]))))
+            [
+              t(s.admissionNo),
+              t(s.fullName),
+              t(s.gender.isEmpty
+                  ? ''
+                  : s.gender[0].toUpperCase() + s.gender.substring(1)),
+              d(s.dob),
+              t(f.levelOf(s)?.label),
+              t(f.classOf(s)?.name),
+              t(s.department),
+              t(s.admissionYear),
+              d(s.createdAt),
+              t(StudentStatus.label(s.status)),
+              _promotionStatus(s),
+              d(s.lastPromotedAt),
+              t(s.guardianName),
+              t(s.guardianPhone),
+              t(s.address),
+              t(s.npseId),
+              t(s.npseYear),
+              t(s.beceId),
+              t(s.beceYear),
+              t(s.wassceId),
+              t(s.wassceYear),
+            ],
+        ],
+      );
+    }
 
     return Column(
       children: [
@@ -387,4 +434,41 @@ class _StudentsListScreenState extends State<StudentsListScreen> {
               : null,
         ),
       );
+}
+
+/// The pupils register columns, in order — the same in PDF, Excel and Word.
+/// Narrow columns for short values, wider ones for names and addresses.
+const _registerColumns = [
+  // Widths fit the longest word or date at 7 pt on A4 landscape, so nothing
+  // is broken mid-word ("No." is 0.7 ≈ 16 pt; 1.0 ≈ 23 pt).
+  ExportColumn('Student ID', flex: 2.0),
+  ExportColumn('Full name', flex: 2.14),
+  ExportColumn('Gender', flex: 1.22),
+  ExportColumn('Date of birth', flex: 1.75, isDate: true),
+  ExportColumn('Level', flex: 1.79),
+  ExportColumn('Class', flex: 1.4),
+  ExportColumn('Department', flex: 1.79),
+  ExportColumn('Admission year', flex: 1.75),
+  ExportColumn('Admission date', flex: 1.75, isDate: true),
+  ExportColumn('Status', flex: 1.75),
+  ExportColumn('Promotion status', flex: 1.62),
+  ExportColumn('Last promoted', flex: 1.75, isDate: true),
+  ExportColumn('Guardian name', flex: 1.92),
+  ExportColumn('Guardian phone', flex: 1.83),
+  ExportColumn('Home address', flex: 2.1),
+  ExportColumn('NPSE index no.', flex: 1.75),
+  ExportColumn('NPSE year', flex: 0.96),
+  ExportColumn('BECE index no.', flex: 1.75),
+  ExportColumn('BECE year', flex: 1.05),
+  ExportColumn('WASSCE index no.', flex: 1.75),
+  ExportColumn('WASSCE year', flex: 1.44),
+];
+
+/// Where the pupil stands with promotion, in one word or two: Graduated,
+/// Repeater (no promotion for 10 months, as in the list), Promoted, or Not
+/// yet promoted.
+String _promotionStatus(Student s) {
+  if (s.status == StudentStatus.graduated) return 'Graduated';
+  if (s.isRepeater()) return 'Repeater';
+  return s.lastPromotedAt != null ? 'Promoted' : 'Not yet promoted';
 }

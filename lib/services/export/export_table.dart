@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import 'docx_export.dart';
 import 'pdf_export.dart';
+import 'register_export.dart';
 import 'xlsx_export.dart';
 
 /// The file types a list screen can print / export to.
@@ -21,12 +22,21 @@ enum ExportFormat {
 }
 
 /// One column of an exported table. [flex] sets its share of the page width.
+/// [isDate] marks a column of dd/MM/yyyy dates, which the register layout
+/// writes to Excel as real date cells.
 class ExportColumn {
-  const ExportColumn(this.title, {this.flex = 2});
+  const ExportColumn(this.title, {this.flex = 2, this.isDate = false});
 
   final String title;
   final double flex;
+  final bool isDate;
 }
+
+/// How the table is laid out. [standard] is used by every list; [register]
+/// is the full pupils register (many columns): landscape, small type, a
+/// letterhead with the badge on every PDF page, a frozen, filterable header
+/// row in Excel, and narrow margins in Word.
+enum ExportLayout { standard, register }
 
 /// A list screen's records as a table, ready to become a PDF, Word or Excel
 /// file. Every format has the same layout:
@@ -45,6 +55,10 @@ class ExportTable {
     required this.rows,
     this.filters = const [],
     DateTime? generatedAt,
+    this.layout = ExportLayout.standard,
+    this.heading,
+    this.schoolAddress = '',
+    this.logo,
   }) : generatedAt = generatedAt ?? DateTime.now();
 
   final String schoolName;
@@ -53,6 +67,16 @@ class ExportTable {
   final List<ExportColumn> columns;
   final List<List<String>> rows;
   final DateTime generatedAt;
+
+  final ExportLayout layout;
+
+  /// Register layout only: the title printed on the pages (e.g. "Pupils
+  /// Register - Class 4"); [title] still names the file.
+  final String? heading;
+
+  /// Register layout only: the school's address and badge for the letterhead.
+  final String schoolAddress;
+  final Uint8List? logo;
 
   /// Wide tables print sideways.
   bool get landscape => columns.length > 6;
@@ -90,6 +114,13 @@ class ExportTable {
 
 Future<Uint8List> _buildExport((ExportTable, ExportFormat) job) async {
   final (table, format) = job;
+  if (table.layout == ExportLayout.register) {
+    return switch (format) {
+      ExportFormat.pdf => await buildRegisterPdf(table),
+      ExportFormat.word => buildRegisterDocx(table),
+      ExportFormat.excel => buildRegisterXlsx(table),
+    };
+  }
   return switch (format) {
     ExportFormat.pdf => await buildPdf(table),
     ExportFormat.word => buildDocx(table),
