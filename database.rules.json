@@ -104,6 +104,8 @@
           "name": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 120" },
           "logoUrl": { ".validate": "newData.isString() && newData.val().length <= 500 && (newData.val() === '' || newData.val().beginsWith('https://'))" },
           "coverUrl": { ".validate": "newData.isString() && newData.val().length <= 500 && (newData.val() === '' || newData.val().beginsWith('https://'))" },
+          "stampUrl": { ".validate": "newData.isString() && newData.val().length <= 500 && (newData.val() === '' || newData.val().beginsWith('https://'))" },
+          "headName": { ".validate": "newData.isString() && newData.val().length <= 120" },
           "address": { ".validate": "newData.isString() && newData.val().length <= 300" },
           "phone": { ".validate": "newData.isString() && newData.val().length <= 40" },
           "email": { ".validate": "newData.isString() && newData.val().length <= 120" },

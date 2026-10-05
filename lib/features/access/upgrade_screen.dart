@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import '../../services/migration_service.dart';
 import '../../state/auth_controller.dart';
 import '../../theme/app_colors.dart';
+import '../../widgets/sign_out_dialog.dart';
+
 import 'gate_layout.dart';
 
 /// Shown while the school still uses the pre-Phase-1 data layout. A school
@@ -77,7 +79,7 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
           ),
           const SizedBox(height: 8),
           OutlinedButton.icon(
-            onPressed: auth.signOut,
+            onPressed: () => confirmSignOut(context),
             icon: const Icon(Icons.logout),
             label: const Text('Sign out'),
           ),
@@ -156,7 +158,7 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
         ],
         const SizedBox(height: 16),
         TextButton.icon(
-          onPressed: auth.signOut,
+          onPressed: () => confirmSignOut(context),
           icon: const Icon(Icons.logout),
           label: const Text('Sign out'),
         ),

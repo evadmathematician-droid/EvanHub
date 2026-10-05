@@ -28,3 +28,10 @@ bool isNetworkError(Object e) =>
     e is TimeoutException ||
     e is HandshakeException ||
     e is http.ClientException;
+
+/// Message for a failed upload that has to happen online (school cover and
+/// badge, documents, teacher documents): plain words when the network is the
+/// reason, the error itself otherwise.
+String uploadFailedMessage(Object e) => isNetworkError(e)
+    ? 'Uploading files needs internet. Connect and try again.'
+    : 'Upload failed: $e';

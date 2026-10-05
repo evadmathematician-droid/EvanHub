@@ -1,3 +1,4 @@
+import '../core/offline_write.dart';
 import '../core/rtdb.dart';
 import '../core/tenant/tenant_refs.dart';
 import '../models/teacher.dart';
@@ -6,6 +7,8 @@ class TeacherService {
   TeacherService(this._refs);
 
   final TenantRefs _refs;
+
+  String get schoolId => _refs.schoolId;
 
   /// Public halves only, sorted by last name.
   Stream<List<Teacher>> watchAll() {
@@ -16,7 +19,7 @@ class TeacherService {
 
   /// [teacher] with its `teacherPrivate` half loaded (admins only).
   Future<Teacher> loadPrivate(Teacher teacher) async {
-    final snapshot = await _refs.teacherPrivate.child(teacher.id).get();
+    final snapshot = await readOnce(_refs.teacherPrivate.child(teacher.id));
     return teacher.withPrivate(asMap(snapshot.value));
   }
 
@@ -24,7 +27,7 @@ class TeacherService {
   /// database rules enforce this too; this check gives a friendly message.
   Future<bool> ninTaken(String nin, {String? excludeId}) async {
     if (nin.isEmpty) return false;
-    final owner = await _refs.ninIndex.child(nin).get();
+    final owner = await readOnce(_refs.ninIndex.child(nin));
     return owner.exists && owner.value != excludeId;
   }
 
@@ -43,17 +46,17 @@ class TeacherService {
         previousNin != teacher.nin) {
       updates['index/nin/$previousNin'] = null;
     }
-    await _refs.school.update(updates);
+    await commitWrite(_refs.school.update(updates));
     return id;
   }
 
   /// Removes the public record, private record and NIN index entry together.
   /// [teacher] must have its private half loaded (for the NIN).
   Future<void> delete(Teacher teacher) {
-    return _refs.school.update({
+    return commitWrite(_refs.school.update({
       'teachers/${teacher.id}': null,
       'teacherPrivate/${teacher.id}': null,
       if (teacher.nin.isNotEmpty) 'index/nin/${teacher.nin}': null,
-    });
+    }));
   }
 }

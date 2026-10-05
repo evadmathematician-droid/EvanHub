@@ -12,6 +12,7 @@ import '../../services/auth_service.dart';
 import '../../services/invite_service.dart';
 import '../../state/auth_controller.dart';
 import '../../theme/app_colors.dart';
+import '../../widgets/sign_out_dialog.dart';
 
 /// "I have an invite code": check the code, show the school and role, create
 /// an account or sign in, then join in ONE atomic update.
@@ -322,7 +323,7 @@ class _JoinScreenState extends State<JoinScreen> {
             child: _busyOr('Join ${invite.schoolName}'),
           ),
           TextButton(
-            onPressed: _busy ? null : _auth.signOut,
+            onPressed: _busy ? null : () => confirmSignOut(context),
             child: const Text('Use a different account'),
           ),
         ] else

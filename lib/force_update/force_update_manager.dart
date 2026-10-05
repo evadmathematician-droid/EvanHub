@@ -256,6 +256,22 @@ class ForceUpdateManager {
     );
   }
 
+  /// The decision from the policy saved on this phone, with no network call.
+  /// Lets the app open at once (even offline) while [check] runs in the
+  /// background; a block saved earlier still applies immediately.
+  Future<ForceUpdateResult> checkSaved() async {
+    final info = await _packageInfo();
+    final code = int.tryParse(info.buildNumber) ?? 0;
+    final policy = await _saved();
+    return ForceUpdateResult(
+      status: decideForceUpdate(installedVersionCode: code, policy: policy),
+      installedVersionCode: code,
+      installedVersionName: info.version,
+      policy: policy,
+      fromNetwork: false,
+    );
+  }
+
   /// Fires when an admin publishes a Remote Config change while the app is
   /// open (real-time updates). The caller should run [check] again.
   Stream<void> onPolicyChanged() async* {

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:firebase_database/firebase_database.dart';
 
+import '../core/offline_write.dart';
 import '../core/rtdb.dart';
 import '../models/school.dart';
 import '../models/user_role.dart';
@@ -102,14 +103,20 @@ class SchoolService {
 
   /// The school's name, for headings on printed / exported lists.
   Future<String> schoolName(String schoolId) async {
-    final snapshot = await _db.ref('schools/$schoolId/profile/name').get();
+    final snapshot = await readOnce(_db.ref('schools/$schoolId/profile/name'));
     return (snapshot.value ?? '').toString();
   }
 
+  /// Sets one image URL on the profile (`logoUrl`, `stampUrl`), or removes
+  /// it when [url] is null. Only that field is written, so nothing else on
+  /// the profile can be overwritten by an older copy.
+  Future<void> setProfileImage(String schoolId, String field, String? url) =>
+      commitWrite(_db.ref('schools/$schoolId/profile/$field').set(url));
+
   Future<void> updateMeta(String schoolId, SchoolMeta meta) {
-    return _db.ref('schools/$schoolId/profile').set({
+    return commitWrite(_db.ref('schools/$schoolId/profile').set({
       ...meta.toMap(),
       'updatedAt': ServerValue.timestamp,
-    });
+    }));
   }
 }

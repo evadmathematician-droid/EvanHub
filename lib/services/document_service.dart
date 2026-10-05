@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import '../core/offline_write.dart';
 import '../core/rtdb.dart';
 import '../core/tenant/tenant_refs.dart';
 import '../models/school_document.dart';
@@ -38,7 +39,7 @@ class DocumentService {
     );
 
     final ref = _refs.documents.push();
-    await ref.set(
+    await commitWrite(ref.set(
       SchoolDocument(
         id: '',
         title: title,
@@ -48,7 +49,7 @@ class DocumentService {
         sizeBytes: file.bytes,
         uploadedBy: uploadedBy,
       ).toMap(),
-    );
+    ));
     return ref.key!;
   }
 
@@ -56,5 +57,5 @@ class DocumentService {
   /// a signed (API-secret) request, which must not ship inside the app — remove
   /// orphaned files from the Cloudinary console or a server-side function.
   Future<void> delete(SchoolDocument document) =>
-      _refs.documents.child(document.id).remove();
+      commitWrite(_refs.documents.child(document.id).remove());
 }

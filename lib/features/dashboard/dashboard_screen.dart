@@ -5,13 +5,14 @@ import 'package:provider/provider.dart';
 
 import '../../core/login_timer.dart';
 import '../../models/school.dart';
+import '../../services/export/export_images.dart';
 import '../../services/school_service.dart';
 import '../../services/stats_service.dart';
 import '../../state/auth_controller.dart';
-import '../../theme/app_colors.dart';
-import '../../widgets/status_views.dart';
 import 'school_events_panel.dart';
 import 'school_hero.dart';
+import 'stat_cards.dart';
+import 'student_search_bar.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -21,7 +22,9 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  late Future<SchoolStats> _statsFuture;
+  /// Live counts for the cards, followed for the life of the screen.
+  StreamSubscription<SchoolStats>? _statsSub;
+  SchoolStats _stats = const SchoolStats();
 
   /// The school profile, followed here for the life of the screen. It must
   /// NOT be a StreamBuilder inside the ListView: the list disposes the banner
@@ -34,11 +37,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void initState() {
     super.initState();
-    _statsFuture = _loadStats();
+    _watchStats();
     _schoolSub = SchoolService()
         .streamSchool(context.read<AuthController>().schoolId!)
         .listen(
           (school) {
+            // Keeps the badge and stamp on the phone for offline record
+            // exports.
+            ExportImages.prefetch([
+              ExportImages.badgeUrl(school.meta.logoUrl),
+              ExportImages.stampUrl(school.meta.stampUrl),
+            ]);
             if (mounted) setState(() => _school = school);
           },
           onError: (Object e) => debugPrint('School profile failed: $e'),
@@ -47,15 +56,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   void dispose() {
+    _statsSub?.cancel();
     _schoolSub?.cancel();
     super.dispose();
   }
 
-  Future<SchoolStats> _loadStats() {
+  void _watchStats() {
+    _statsSub?.cancel();
     final refs = context.read<AuthController>().tenant!;
-    return StatsService(refs)
-        .load()
-        .whenComplete(() => LoginTimer.finish('dashboard numbers loaded'));
+    var first = true;
+    _statsSub = StatsService(refs).watch().listen(
+      (stats) {
+        if (first) {
+          first = false;
+          LoginTimer.finish('dashboard numbers loaded');
+        }
+        if (mounted) setState(() => _stats = stats);
+      },
+      onError: (Object e) => debugPrint('Dashboard counts failed: $e'),
+    );
+  }
+
+  /// Pull to refresh: the counts are live already; this just re-listens.
+  Future<void> _refresh() async {
+    _watchStats();
+    await Future<void>.delayed(const Duration(milliseconds: 400));
   }
 
   @override
@@ -63,10 +88,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Dashboard')),
       body: RefreshIndicator(
-        onRefresh: () async {
-          setState(() => _statsFuture = _loadStats());
-          await _statsFuture;
-        },
+        onRefresh: _refresh,
         child: ListView(
           padding: EdgeInsets.zero,
           children: [
@@ -74,76 +96,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
             SchoolHero(school: _school),
             Padding(
               padding: const EdgeInsets.all(16),
-              child: _content(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Full width, between the banner and the cards.
+                  const StudentSearchBar(),
+                  const SizedBox(height: 16),
+                  StatCards(stats: _stats),
+                  const SizedBox(height: 24),
+                  const SchoolEventsPanel(),
+                ],
+              ),
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _content() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        FutureBuilder<SchoolStats>(
-          future: _statsFuture,
-          builder: (context, snapshot) {
-            if (snapshot.hasError) {
-              return ErrorView(
-                message: 'Could not load stats.\n${snapshot.error}',
-                onRetry: () => setState(() => _statsFuture = _loadStats()),
-              );
-            }
-            final stats = snapshot.data;
-            return GridView.count(
-              crossAxisCount: 2,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              childAspectRatio: 1.3,
-              mainAxisSpacing: 12,
-              crossAxisSpacing: 12,
-              children: [
-                _StatTile('Students', stats?.students, Icons.groups_outlined),
-                _StatTile('Teachers', stats?.teachers, Icons.person_outline),
-                _StatTile('Classes', stats?.classes, Icons.class_outlined),
-                _StatTile('Announcements', stats?.announcements,
-                    Icons.campaign_outlined),
-              ],
-            );
-          },
-        ),
-        const SizedBox(height: 24),
-        const SchoolEventsPanel(),
-      ],
-    );
-  }
-}
-
-class _StatTile extends StatelessWidget {
-  const _StatTile(this.label, this.value, this.icon);
-
-  final String label;
-  final int? value;
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Icon(icon, color: AppColors.primary),
-            Text(
-              value?.toString() ?? '—',
-              style: const TextStyle(
-                  fontSize: 22, fontWeight: FontWeight.w800),
-            ),
-            Text(label,
-                style: const TextStyle(color: AppColors.textSecondary)),
           ],
         ),
       ),

@@ -16,8 +16,9 @@ import 'force_update_screen.dart';
 /// )
 /// ```
 ///
-/// - First launch: a plain loading screen until the first check finishes.
-///   The app's own screens are not built until then.
+/// - Launch: the app opens at once, decided from the policy saved on the
+///   phone (so it works offline); the network check runs in the background
+///   and replaces the app with the update screen if this build is blocked.
 /// - Blocked (outdated build or maintenance): [ForceUpdateScreen] replaces
 ///   the app. The router and its screens are not built at all, so there is
 ///   nothing to navigate to, and the system Back button is swallowed.
@@ -72,6 +73,7 @@ class _ForceUpdateGateState extends State<ForceUpdateGate>
     super.initState();
     if (!widget.enforce) return;
     WidgetsBinding.instance.addObserver(this);
+    _loadSaved();
     _check();
     _policySub = _manager.onPolicyChanged().listen((_) => _check());
   }
@@ -88,11 +90,20 @@ class _ForceUpdateGateState extends State<ForceUpdateGate>
     if (state == AppLifecycleState.resumed) _check();
   }
 
-  /// While blocked (or before the first check), Back does nothing. Returning
-  /// true stops Flutter from passing it on, so it cannot reach the router
-  /// underneath.
+  /// While blocked, Back does nothing. Returning true stops Flutter from
+  /// passing it on, so it cannot reach the router underneath.
   @override
-  Future<bool> didPopRoute() async => _result == null || _blocked;
+  Future<bool> didPopRoute() async => _blocked;
+
+  /// Applies the saved policy unless the network check has already answered.
+  Future<void> _loadSaved() async {
+    try {
+      final saved = await _manager.checkSaved();
+      if (mounted && _result == null) setState(() => _result = saved);
+    } catch (e) {
+      debugPrint('Force update: could not read saved policy: $e');
+    }
+  }
 
   Future<void> _check() async {
     if (_checking) return;
@@ -143,13 +154,10 @@ class _ForceUpdateGateState extends State<ForceUpdateGate>
   Widget build(BuildContext context) {
     if (!widget.enforce) return widget.child;
 
+    // Before the saved policy is read (a few milliseconds) the app shows as
+    // normal; a block takes over as soon as it is known.
     final result = _result;
-    if (result == null) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
-    if (!_blocked) return widget.child;
+    if (result == null || !_blocked) return widget.child;
 
     final screen = ForceUpdateScreen(
       maintenance: result.status == ForceUpdateStatus.maintenance,

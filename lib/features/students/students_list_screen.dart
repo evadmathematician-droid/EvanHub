@@ -359,7 +359,8 @@ class _StudentsListScreenState extends State<StudentsListScreen> {
   Widget _studentTile(Student s, SchoolClass? schoolClass, bool canEdit) =>
       Card(
         child: ListTile(
-          leading: PhotoAvatar(url: s.photoUrl, title: s.fullName),
+          leading: PhotoAvatar(
+              url: s.photoUrl, title: s.fullName, recordId: s.id),
           title: s.isRepeater()
               ? Row(
                   children: [

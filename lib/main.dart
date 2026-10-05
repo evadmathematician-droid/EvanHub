@@ -1,12 +1,16 @@
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:hive_ce_flutter/hive_flutter.dart';
 
 import 'app/app.dart';
+import 'core/offline_write.dart';
 import 'firebase_options.dart';
 import 'services/delete_guard_store.dart';
 import 'services/pending_event_store.dart';
+import 'services/session_cache.dart';
+import 'services/upload_queue.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -27,11 +31,29 @@ Future<void> main() async {
     if (e.code != 'duplicate-app') rethrow;
   }
 
-  // Local storage: offline event posts and the delete-password lockout. If it
-  // can't open, the app still runs — posting just needs the internet and the
-  // lockout lasts only until the app closes.
+  // Offline-first (phones only): the database keeps a copy of everything the
+  // app has read on disk, answers listeners from it with no internet, and
+  // queues writes until the connection returns. Must run before anything
+  // else uses the database. Web stays online-only.
+  if (!kIsWeb) {
+    try {
+      FirebaseDatabase.instance
+        ..setPersistenceEnabled(true)
+        ..setPersistenceCacheSizeBytes(50 * 1024 * 1024);
+    } catch (e) {
+      debugPrint('Database persistence unavailable: $e');
+    }
+  }
+
+  // Local storage: the saved session (opens the app offline), the count of
+  // changes waiting to sync, photos waiting to upload, offline event posts
+  // and the delete-password lockout. If it can't open, the app still runs —
+  // it just needs the internet to open, post, upload and keep the lockout.
   try {
     await Hive.initFlutter();
+    await SessionCache.init();
+    await PendingWrites.init();
+    await UploadQueue.init();
     await PendingEventStore.init();
     await DeleteGuardStore.init();
   } catch (e) {

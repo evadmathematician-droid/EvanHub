@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../state/auth_controller.dart';
+import '../../widgets/sign_out_dialog.dart';
+
 import 'gate_layout.dart';
 
 /// Parent / student accounts have no screens yet. They land here instead of
@@ -20,7 +22,7 @@ class ParentPortalScreen extends StatelessWidget {
           'will let you know when it is ready.',
       children: [
         OutlinedButton.icon(
-          onPressed: auth.signOut,
+          onPressed: () => confirmSignOut(context),
           icon: const Icon(Icons.logout),
           label: const Text('Sign out'),
         ),

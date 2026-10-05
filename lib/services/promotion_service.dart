@@ -1,5 +1,7 @@
+import '../core/offline_write.dart';
 import '../core/rtdb.dart';
 import '../core/tenant/tenant_refs.dart';
+import '../models/promotion_record.dart';
 import '../models/school_class.dart';
 import '../models/student.dart';
 import 'promotion_planner.dart';
@@ -23,7 +25,7 @@ class PromotionService {
   final TenantRefs _refs;
 
   Future<List<SchoolClass>> _classes() async {
-    final snapshot = await _refs.classes.get();
+    final snapshot = await readOnce(_refs.classes);
     return [
       for (final c in snapshot.children)
         if (c.key != null && c.value is Map)
@@ -34,8 +36,8 @@ class PromotionService {
   /// Every student with the private half (exam records) filled in.
   Future<List<Student>> _studentsWithPrivate() async {
     final results = await Future.wait([
-      _refs.students.get(),
-      _refs.studentPrivate.get(),
+      readOnce(_refs.students),
+      readOnce(_refs.studentPrivate),
     ]);
     final private = asMap(results[1].value);
     return [
@@ -62,6 +64,20 @@ class PromotionService {
     return needs;
   }
 
+  /// Every promotion / repeat / graduation recorded for [studentId], oldest
+  /// first. Admins only (see `database.rules.json`).
+  Future<List<PromotionRecord>> history(String studentId) async {
+    final snapshot = await readOnce(_refs.promotions);
+    return [
+      for (final r in snapshot.children)
+        if (r.key != null &&
+            r.value is Map &&
+            asMap(r.value)['studentId'] == studentId)
+          PromotionRecord.fromMap(r.key!, asMap(r.value)),
+    ]..sort((a, b) => (a.promotedAt ?? DateTime(0))
+        .compareTo(b.promotedAt ?? DateTime(0)));
+  }
+
   /// Runs [request] as ONE atomic multi-path update and returns the report.
   /// See [planPromotion] for the rules each pupil is checked against.
   Future<PromotionReport> run(PromotionRequest request) async {
@@ -72,7 +88,9 @@ class PromotionService {
       request: request,
       newRecordKey: () => _refs.promotions.push().key!,
     );
-    if (plan.updates.isNotEmpty) await _refs.school.update(plan.updates);
+    if (plan.updates.isNotEmpty) {
+      await commitWrite(_refs.school.update(plan.updates));
+    }
     return plan.report;
   }
 }

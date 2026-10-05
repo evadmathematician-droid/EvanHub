@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 
 import '../../app/routes.dart';
 import '../../state/auth_controller.dart';
+import '../../widgets/sign_out_dialog.dart';
+
 import 'gate_layout.dart';
 
 /// Shown when the account's school no longer lists it as a member (the admin
@@ -29,7 +31,7 @@ class NoAccessScreen extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         OutlinedButton.icon(
-          onPressed: auth.signOut,
+          onPressed: () => confirmSignOut(context),
           icon: const Icon(Icons.logout),
           label: const Text('Sign out'),
         ),

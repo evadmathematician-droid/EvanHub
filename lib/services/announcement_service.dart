@@ -1,3 +1,4 @@
+import '../core/offline_write.dart';
 import '../core/rtdb.dart';
 import '../core/tenant/tenant_refs.dart';
 import '../models/announcement.dart';
@@ -17,9 +18,10 @@ class AnnouncementService {
 
   Future<String> create(Announcement announcement) async {
     final ref = _refs.announcements.push();
-    await ref.set(announcement.toMap());
+    await commitWrite(ref.set(announcement.toMap()));
     return ref.key!;
   }
 
-  Future<void> delete(String id) => _refs.announcements.child(id).remove();
+  Future<void> delete(String id) =>
+      commitWrite(_refs.announcements.child(id).remove());
 }

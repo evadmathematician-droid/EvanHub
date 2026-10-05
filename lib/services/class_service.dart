@@ -1,3 +1,4 @@
+import '../core/offline_write.dart';
 import '../core/rtdb.dart';
 import '../core/tenant/tenant_refs.dart';
 import '../models/school_class.dart';
@@ -16,7 +17,7 @@ class ClassService {
 
   Future<String> add(SchoolClass schoolClass) async {
     final ref = _refs.classes.push();
-    await ref.set(schoolClass.toMap());
+    await commitWrite(ref.set(schoolClass.toMap()));
     return ref.key!;
   }
 
@@ -27,7 +28,7 @@ class ClassService {
     SchoolLevel level, {
     required String academicYear,
   }) async {
-    final existing = await _refs.classes.get();
+    final existing = await readOnce(_refs.classes);
     final taken = <String>{
       for (final c in existing.children)
         if (asMap(c.value)['level'] == level.wire)
@@ -46,26 +47,27 @@ class ClassService {
       ).toMap();
     }
     if (updates.isEmpty) return 0;
-    await _refs.classes.update(updates);
+    await commitWrite(_refs.classes.update(updates));
     return updates.length;
   }
 
   Future<void> update(SchoolClass schoolClass) {
-    return _refs.classes.child(schoolClass.id).update(schoolClass.toMap());
+    return commitWrite(
+        _refs.classes.child(schoolClass.id).update(schoolClass.toMap()));
   }
 
   /// Deletes the class and unassigns its students (classId set to '') in one
   /// atomic multi-path update, so no student is left pointing at a missing
   /// class. Returns how many students were unassigned.
   Future<int> delete(String id) async {
-    final students = await _refs.students.get();
+    final students = await readOnce(_refs.students);
     final updates = <String, Object?>{'classes/$id': null};
     for (final s in students.children) {
       if (s.key != null && asMap(s.value)['classId'] == id) {
         updates['students/${s.key}/classId'] = '';
       }
     }
-    await _refs.school.update(updates);
+    await commitWrite(_refs.school.update(updates));
     return updates.length - 1;
   }
 }

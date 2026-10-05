@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/image_url.dart';
+import '../../core/internet_check.dart';
 import '../../models/school.dart';
 import '../../services/cloudinary_service.dart';
 import '../../services/school_service.dart';
@@ -51,7 +52,7 @@ class _SchoolHeroState extends State<SchoolHero> {
           : school.meta.copyWith(logoUrl: upload.url);
       await SchoolService().updateMeta(school.id, meta);
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Could not update: $e')));
+      messenger.showSnackBar(SnackBar(content: Text(uploadFailedMessage(e))));
     } finally {
       if (mounted) setState(() => _busy = false);
     }

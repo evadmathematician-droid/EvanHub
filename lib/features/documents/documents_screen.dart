@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/internet_check.dart';
 import '../../models/school_document.dart';
 import '../../services/document_service.dart';
 import '../../services/file_actions.dart';
@@ -81,7 +82,7 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
       );
       _snack('Uploaded.');
     } catch (e) {
-      _snack('Upload failed: $e');
+      _snack(uploadFailedMessage(e));
     } finally {
       if (mounted) setState(() => _uploading = false);
     }

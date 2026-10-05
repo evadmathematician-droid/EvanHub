@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../features/announcements/announcement_form_screen.dart';
 import '../features/announcements/announcements_list_screen.dart';
+import '../features/access/connect_once_screen.dart';
 import '../features/access/no_access_screen.dart';
 import '../features/access/parent_portal_screen.dart';
 import '../features/access/upgrade_screen.dart';
@@ -44,6 +45,7 @@ GoRouter buildRouter(AuthController auth) {
       const gates = {
         Routes.splash,
         Routes.login,
+        Routes.connect,
         Routes.onboarding,
         Routes.noAccess,
         Routes.upgrade,
@@ -64,6 +66,8 @@ GoRouter buildRouter(AuthController auth) {
           return (loc == Routes.login || loc == Routes.onboarding)
               ? null
               : Routes.login;
+        case AuthStatus.needsConnection:
+          return only(Routes.connect);
         case AuthStatus.needsOnboarding:
           return only(Routes.onboarding);
         case AuthStatus.noAccess:
@@ -84,6 +88,10 @@ GoRouter buildRouter(AuthController auth) {
       GoRoute(
         path: Routes.login,
         builder: (_, _) => const LoginScreen(),
+      ),
+      GoRoute(
+        path: Routes.connect,
+        builder: (_, _) => const ConnectOnceScreen(),
       ),
       GoRoute(
         path: Routes.onboarding,

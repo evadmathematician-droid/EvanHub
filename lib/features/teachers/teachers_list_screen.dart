@@ -33,7 +33,8 @@ class TeachersListScreen extends StatelessWidget {
         emptyIcon: Icons.person_outline,
         itemBuilder: (context, t) => Card(
           child: ListTile(
-            leading: PhotoAvatar(url: t.photoUrl, title: t.fullName),
+            leading: PhotoAvatar(
+                url: t.photoUrl, title: t.fullName, recordId: t.id),
             title: Text(t.fullName),
             subtitle: Text([
               if (t.subjects.isNotEmpty) t.subjects.join(', '),

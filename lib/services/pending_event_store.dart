@@ -95,6 +95,14 @@ class PendingEventStore {
     }
   }
 
+  /// Every pending post and its image, for every school (sign-out).
+  Future<void> clearAll() async {
+    for (final event in all()) {
+      await remove(event);
+    }
+    await _box.clear();
+  }
+
   static Future<Directory> _imageDir() async {
     final docs = await getApplicationDocumentsDirectory();
     final dir =

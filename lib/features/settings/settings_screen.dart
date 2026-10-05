@@ -6,6 +6,8 @@ import '../../services/school_service.dart';
 import '../../state/auth_controller.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/status_views.dart';
+import '../../widgets/sign_out_dialog.dart';
+import 'school_images_section.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -22,13 +24,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _address = TextEditingController();
   final _phone = TextEditingController();
   final _email = TextEditingController();
+  final _head = TextEditingController();
   bool _loaded = false;
   bool _busy = false;
   String? _message;
 
   @override
   void dispose() {
-    for (final c in [_name, _address, _phone, _email]) {
+    for (final c in [_name, _address, _phone, _email, _head]) {
       c.dispose();
     }
     super.dispose();
@@ -40,6 +43,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _address.text = meta.address;
     _phone.text = meta.phone;
     _email.text = meta.email;
+    _head.text = meta.headName;
     _loaded = true;
   }
 
@@ -56,6 +60,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           address: _address.text.trim(),
           phone: _phone.text.trim(),
           email: _email.text.trim(),
+          headName: _head.text.trim(),
         ),
       );
       setState(() => _message = 'Saved.');
@@ -113,6 +118,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 enabled: canEdit,
                 decoration: const InputDecoration(labelText: 'Contact email'),
               ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _head,
+                enabled: canEdit,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(
+                  labelText: 'Head Teacher / Principal',
+                  helperText: 'Printed under the signature line on student '
+                      'records.',
+                ),
+              ),
               if (_message != null) ...[
                 const SizedBox(height: 12),
                 Text(_message!,
@@ -125,6 +141,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       _busy ? null : () => _save(schoolId, school.meta),
                   child: const Text('Save profile'),
                 ),
+              ],
+              if (canEdit) ...[
+                const Divider(height: 40),
+                SchoolImagesSection(school: school),
               ],
               const Divider(height: 40),
               Text('Account', style: Theme.of(context).textTheme.titleMedium),
@@ -142,7 +162,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               const SizedBox(height: 12),
               OutlinedButton.icon(
-                onPressed: () => context.read<AuthController>().signOut(),
+                onPressed: () => confirmSignOut(context),
                 icon: const Icon(Icons.logout),
                 label: const Text('Sign out'),
               ),

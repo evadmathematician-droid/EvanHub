@@ -1,3 +1,4 @@
+import '../core/offline_write.dart';
 import '../core/rtdb.dart';
 import '../core/tenant/tenant_refs.dart';
 import '../models/student.dart';
@@ -6,6 +7,8 @@ class StudentService {
   StudentService(this._refs);
 
   final TenantRefs _refs;
+
+  String get schoolId => _refs.schoolId;
 
   /// Public halves only, sorted by last name.
   Stream<List<Student>> watchAll() {
@@ -22,8 +25,23 @@ class StudentService {
 
   /// [student] with its `studentPrivate` half loaded.
   Future<Student> loadPrivate(Student student) async {
-    final snapshot = await _refs.studentPrivate.child(student.id).get();
+    final snapshot = await readOnce(_refs.studentPrivate.child(student.id));
     return student.withPrivate(asMap(snapshot.value));
+  }
+
+  /// The student whose admission number (the student ID) is [input], with the
+  /// private half loaded, or null when there is none in THIS school. Spaces
+  /// around the number and letter case are ignored. Looks the number up in
+  /// the school's own `index/admissionNo`, so another school's students can
+  /// never be found. Reads the phone's copy, so it works offline.
+  Future<Student?> findByAdmissionNo(String input) async {
+    final key = indexKey(input);
+    if (key.isEmpty) return null;
+    final id = (await readOnce(_refs.admissionIndex.child(key))).value;
+    if (id is! String || id.isEmpty) return null;
+    final public = await readOnce(_refs.students.child(id));
+    if (!public.exists) return null;
+    return loadPrivate(Student.fromMap(id, asMap(public.value)));
   }
 
   /// True when another student already holds [admissionNo] (case-insensitive).
@@ -31,7 +49,7 @@ class StudentService {
   /// The database rules enforce this too; this check gives a friendly message.
   Future<bool> admissionNoTaken(String admissionNo, {String? excludeId}) async {
     final owner =
-        await _refs.admissionIndex.child(indexKey(admissionNo)).get();
+        await readOnce(_refs.admissionIndex.child(indexKey(admissionNo)));
     return owner.exists && owner.value != excludeId;
   }
 
@@ -51,17 +69,17 @@ class StudentService {
       final oldKey = indexKey(previousAdmissionNo);
       if (oldKey != newKey) updates['index/admissionNo/$oldKey'] = null;
     }
-    await _refs.school.update(updates);
+    await commitWrite(_refs.school.update(updates));
     return id;
   }
 
   /// Removes the public record, private record and index entry together.
   Future<void> delete(Student student) {
-    return _refs.school.update({
+    return commitWrite(_refs.school.update({
       'students/${student.id}': null,
       'studentPrivate/${student.id}': null,
       if (student.admissionNo.isNotEmpty)
         'index/admissionNo/${indexKey(student.admissionNo)}': null,
-    });
+    }));
   }
 }

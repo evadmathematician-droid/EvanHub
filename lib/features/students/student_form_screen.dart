@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -7,12 +8,14 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../app/routes.dart';
+import '../../core/internet_check.dart';
 import '../../core/person_name.dart';
 import '../../models/school_class.dart';
 import '../../models/school_level.dart';
 import '../../models/student.dart';
 import '../../services/class_service.dart';
 import '../../services/cloudinary_service.dart';
+import '../../services/upload_queue.dart';
 import '../../services/student_service.dart';
 import '../../state/auth_controller.dart';
 import '../../theme/app_colors.dart';
@@ -61,6 +64,15 @@ class _StudentFormScreenState extends State<StudentFormScreen> {
   String? _department;
   String _status = StudentStatus.active;
   String _photoUrl = '';
+
+  /// A photo picked with no internet: shown here, queued on Save, and
+  /// uploaded when the connection is back.
+  Uint8List? _pickedPhoto;
+  String _pickedPhotoName = '';
+
+  /// A new photo was uploaded here, so an older one still queued for this
+  /// record must not be shown or uploaded.
+  bool _photoReplaced = false;
 
   List<SchoolClass> _classes = const [];
   StreamSubscription<List<SchoolClass>>? _classSub;
@@ -237,20 +249,53 @@ class _StudentFormScreenState extends State<StudentFormScreen> {
     if (!mounted) return;
 
     setState(() => _photoBusy = true);
+    Uint8List? bytes;
     try {
-      final bytes = await file.readAsBytes();
+      bytes = await file.readAsBytes();
+      // Offline (phones): keep the photo and queue it on Save.
+      if (UploadQueue.instance != null && !await hasInternet()) {
+        _keepPickedPhoto(bytes, file.name);
+        return;
+      }
       final upload = await CloudinaryService().upload(
         bytes: bytes,
         fileName: file.name,
         folder: tenant.studentPhotoFolder,
       );
-      if (mounted) setState(() => _photoUrl = upload.url);
+      if (mounted) {
+        setState(() {
+          _photoUrl = upload.url;
+          _pickedPhoto = null;
+          _photoReplaced = true;
+        });
+      }
     } catch (e) {
-      if (mounted) setState(() => _error = 'Photo upload failed: $e');
+      if (bytes != null && UploadQueue.instance != null && isNetworkError(e)) {
+        _keepPickedPhoto(bytes, file.name);
+      } else if (mounted) {
+        setState(() => _error = 'Photo upload failed: $e');
+      }
     } finally {
       if (mounted) setState(() => _photoBusy = false);
     }
   }
+
+  void _keepPickedPhoto(Uint8List bytes, String name) {
+    if (!mounted) return;
+    setState(() {
+      _pickedPhoto = bytes;
+      _pickedPhotoName = name;
+    });
+  }
+
+  /// The photo shown at the top of the form.
+  ImageProvider? get _photo => formPhotoImage(
+        context,
+        picked: _pickedPhoto,
+        recordId: _photoReplaced ? null : widget.existing?.id,
+        url: _photoUrl,
+        radius: 44,
+      );
 
   Future<void> _save() async {
     if (!_privateLoaded) return;
@@ -320,10 +365,22 @@ class _StudentFormScreenState extends State<StudentFormScreen> {
         createdAt: widget.existing?.createdAt,
         lastPromotedAt: widget.existing?.lastPromotedAt,
       );
-      await service.save(
+      final savedId = await service.save(
         student,
         previousAdmissionNo: widget.existing?.admissionNo,
       );
+      final picked = _pickedPhoto;
+      if (picked != null) {
+        await UploadQueue.instance?.addPhoto(
+          schoolId: service.schoolId,
+          collection: 'students',
+          recordId: savedId,
+          bytes: picked,
+          fileName: _pickedPhotoName,
+        );
+      } else if (_photoReplaced) {
+        await UploadQueue.instance?.cancel('students', savedId);
+      }
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       if (mounted) setState(() => _error = saveErrorMessage(e));
@@ -400,13 +457,10 @@ class _StudentFormScreenState extends State<StudentFormScreen> {
                   children: [
                     CircleAvatar(
                       radius: 44,
-                      backgroundImage:
-                          _photoUrl.isEmpty
-                          ? null
-                          : avatarImage(context, _photoUrl, radius: 44),
+                      backgroundImage: _photo,
                       child: _photoBusy
                           ? const CircularProgressIndicator()
-                          : (_photoUrl.isEmpty
+                          : (_photo == null
                               ? const Icon(Icons.person, size: 40)
                               : null),
                     ),

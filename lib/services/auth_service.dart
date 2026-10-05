@@ -68,7 +68,9 @@ class AuthException implements Exception {
         'Incorrect email or password.',
       'email-already-in-use' => 'An account already exists for that email.',
       'weak-password' => 'Password is too weak — use at least 6 characters.',
-      'network-request-failed' => 'Network error — check your connection.',
+      'network-request-failed' =>
+        'No internet connection. First login (or creating an account) needs '
+            'internet. After that you can use the app offline.',
       'too-many-requests' => 'Too many attempts. Try again later.',
       _ => e.message ?? 'Authentication failed (${e.code}).',
     };

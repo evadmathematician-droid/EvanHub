@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -7,7 +8,10 @@ import 'package:provider/provider.dart';
 import '../force_update/force_update_gate.dart';
 import '../services/event_sync_service.dart';
 import '../services/pending_event_store.dart';
+import '../services/upload_queue.dart';
+import '../services/upload_sync_service.dart';
 import '../state/auth_controller.dart';
+import '../state/sync_monitor.dart';
 import '../theme/app_theme.dart';
 import 'router.dart';
 
@@ -23,6 +27,8 @@ class _EvangelistGlobalAppState extends State<EvangelistGlobalApp> {
   late final GoRouter _router;
   final _messengerKey = GlobalKey<ScaffoldMessengerState>();
   EventSyncService? _eventSync;
+  UploadSyncService? _uploadSync;
+  SyncMonitor? _syncMonitor;
   StreamSubscription<int>? _uploadedSub;
 
   @override
@@ -40,20 +46,33 @@ class _EvangelistGlobalAppState extends State<EvangelistGlobalApp> {
         );
       });
     }
+
+    // Offline-first (phones only): queued photos and the sync banner.
+    final uploads = UploadQueue.instance;
+    if (uploads != null) {
+      _uploadSync = UploadSyncService(_auth, uploads)..start();
+    }
+    if (!kIsWeb) _syncMonitor = SyncMonitor(_auth)..start();
   }
 
   @override
   void dispose() {
     _uploadedSub?.cancel();
     _eventSync?.dispose();
+    _uploadSync?.dispose();
+    _syncMonitor?.dispose();
     _auth.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider<AuthController>.value(
-      value: _auth,
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider<AuthController>.value(value: _auth),
+        // Null on web, where the sync banner is not shown.
+        ChangeNotifierProvider<SyncMonitor?>.value(value: _syncMonitor),
+      ],
       child: MaterialApp.router(
         title: 'EvanHub',
         debugShowCheckedModeBanner: false,

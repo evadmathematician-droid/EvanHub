@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../app/routes.dart';
 import '../../models/user_role.dart';
 import '../../state/auth_controller.dart';
+import '../../widgets/sign_out_dialog.dart';
 
 class MoreScreen extends StatelessWidget {
   const MoreScreen({super.key});
@@ -46,7 +47,7 @@ class MoreScreen extends StatelessWidget {
           ListTile(
             leading: const Icon(Icons.logout),
             title: const Text('Sign out'),
-            onTap: () => context.read<AuthController>().signOut(),
+            onTap: () => confirmSignOut(context),
           ),
         ],
       ),

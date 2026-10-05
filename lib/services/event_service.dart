@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 
+import '../core/offline_write.dart';
 import '../core/rtdb.dart';
 import '../core/tenant/tenant_refs.dart';
 import '../models/school_event.dart';
@@ -76,7 +77,8 @@ class EventService {
     return eventId;
   }
 
-  Future<void> delete(String id) => _refs.events.child(id).remove();
+  Future<void> delete(String id) =>
+      commitWrite(_refs.events.child(id).remove());
 }
 
 /// Shrinks a photo to at most 1600px on its longer side, JPEG quality 80 —

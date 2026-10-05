@@ -14,6 +14,13 @@ class SchoolMeta {
   final String phone;
   final String email;
 
+  /// The school stamp, printed on student record PDFs (ideally a PNG with a
+  /// transparent background). Null or empty when none is uploaded.
+  final String? stampUrl;
+
+  /// Head Teacher / Principal, printed under the signature line.
+  final String headName;
+
   const SchoolMeta({
     required this.name,
     this.logoUrl,
@@ -21,6 +28,8 @@ class SchoolMeta {
     this.address = '',
     this.phone = '',
     this.email = '',
+    this.stampUrl,
+    this.headName = '',
   });
 
   factory SchoolMeta.fromMap(Map<String, dynamic> map) => SchoolMeta(
@@ -30,6 +39,8 @@ class SchoolMeta {
         address: (map['address'] ?? '') as String,
         phone: (map['phone'] ?? '') as String,
         email: (map['email'] ?? '') as String,
+        stampUrl: map['stampUrl'] as String?,
+        headName: (map['headName'] ?? '') as String,
       );
 
   Map<String, dynamic> toMap() => {
@@ -39,6 +50,8 @@ class SchoolMeta {
         'address': address,
         'phone': phone,
         'email': email,
+        'stampUrl': stampUrl,
+        'headName': headName,
       };
 
   SchoolMeta copyWith({
@@ -48,6 +61,8 @@ class SchoolMeta {
     String? address,
     String? phone,
     String? email,
+    String? stampUrl,
+    String? headName,
   }) =>
       SchoolMeta(
         name: name ?? this.name,
@@ -56,6 +71,8 @@ class SchoolMeta {
         address: address ?? this.address,
         phone: phone ?? this.phone,
         email: email ?? this.email,
+        stampUrl: stampUrl ?? this.stampUrl,
+        headName: headName ?? this.headName,
       );
 }
 
