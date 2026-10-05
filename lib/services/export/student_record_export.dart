@@ -1,7 +1,6 @@
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
-import 'package:intl/intl.dart';
 import 'package:printing/printing.dart';
 
 import '../../models/student.dart';
@@ -10,21 +9,31 @@ import 'student_record_pdf.dart';
 
 enum RecordFormat { pdf, png }
 
-/// Builds a student's record as a PDF or a PNG image and hands it over:
-/// the share sheet on phones, a download on the web.
+/// What to do with the exported record.
+enum RecordAction {
+  /// The system share sheet (WhatsApp, Telegram, Gmail, Bluetooth, Drive …).
+  /// On the web: the browser's share option where supported, else a download.
+  share,
+
+  /// Save to the phone (the user picks the folder). On the web: a download.
+  save,
+}
+
+/// Builds a student's record as a PDF or a PNG image and hands it over.
 class StudentRecordExport {
   StudentRecordExport._();
 
-  /// `<StudentID>_<StudentName>_<yyyy-MM-dd>.pdf` (or `.png`), with anything
-  /// that isn't a letter, digit or dash turned into `_`.
-  static String fileName(Student s, DateTime at, RecordFormat format) {
+  /// `<StudentID>_<StudentName>_Record.pdf` (or `.png`): letters and digits
+  /// only, words joined by `_`.
+  static String fileName(Student s, RecordFormat format) {
     String clean(String v) => v
         .trim()
-        .replaceAll(RegExp(r'[^A-Za-z0-9-]+'), '_')
+        .replaceAll(RegExp(r'[^A-Za-z0-9]+'), '_')
         .replaceAll(RegExp(r'^_+|_+$'), '');
     final id = clean(s.admissionNo).isEmpty ? clean(s.id) : clean(s.admissionNo);
-    final date = DateFormat('yyyy-MM-dd').format(at);
-    return '${id}_${clean(s.fullName)}_$date.${format.name}';
+    final name = clean(s.fullName);
+    final base = [id, if (name.isNotEmpty) name, 'Record'].join('_');
+    return '$base.${format.name}';
   }
 
   static Future<Uint8List> build(
@@ -33,12 +42,24 @@ class StudentRecordExport {
     return format == RecordFormat.pdf ? pdf : _toPng(pdf);
   }
 
-  /// Shares (phones) or downloads (web) the file.
-  static Future<void> deliver(
-      String fileName, Uint8List bytes, RecordFormat format) {
+  /// Shares or saves the file. Returns false when the user cancelled a save.
+  static Future<bool> deliver(String fileName, Uint8List bytes,
+      RecordFormat format, RecordAction action) async {
     final mime = format == RecordFormat.pdf ? 'application/pdf' : 'image/png';
-    if (kIsWeb) return FileActions.save(fileName, bytes, mimeType: mime);
-    return FileActions.share(fileName, bytes, mimeType: mime);
+    if (action == RecordAction.save) {
+      return FileActions.save(fileName, bytes, mimeType: mime);
+    }
+    if (kIsWeb) {
+      // Not every browser can share files; those download it instead.
+      try {
+        await FileActions.share(fileName, bytes, mimeType: mime);
+      } catch (_) {
+        await FileActions.save(fileName, bytes, mimeType: mime);
+      }
+      return true;
+    }
+    await FileActions.share(fileName, bytes, mimeType: mime);
+    return true;
   }
 
   /// The PDF drawn as an image at print quality (150 dpi), so the PNG looks

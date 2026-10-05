@@ -96,7 +96,10 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen> {
   }
 
   Future<void> _chooseExport() async {
-    final format = await showModalBottomSheet<RecordFormat>(
+    // Phones share through the system sheet; the web can only share in some
+    // browsers, so it says "download" where that is what happens.
+    final choice =
+        await showModalBottomSheet<(RecordFormat, RecordAction)>(
       context: context,
       showDragHandle: true,
       builder: (context) => SafeArea(
@@ -104,38 +107,82 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: const Icon(Icons.picture_as_pdf_outlined,
+              leading: const Icon(Icons.share_outlined,
+                  color: AppColors.primary),
+              title: const Text('Share PDF'),
+              subtitle: Text(kIsWeb
+                  ? 'Share from the browser, or download if it can\'t'
+                  : 'WhatsApp, Telegram, Gmail, Bluetooth, Drive …'),
+              onTap: () => Navigator.pop(
+                  context, (RecordFormat.pdf, RecordAction.share)),
+            ),
+            ListTile(
+              leading: const Icon(Icons.download_outlined,
                   color: AppColors.danger),
-              title: const Text('Export as PDF'),
+              title: Text(kIsWeb ? 'Download PDF' : 'Save PDF to device'),
               subtitle: const Text('A4 record with school letterhead'),
-              onTap: () => Navigator.pop(context, RecordFormat.pdf),
+              onTap: () => Navigator.pop(
+                  context, (RecordFormat.pdf, RecordAction.save)),
             ),
             ListTile(
               leading:
                   const Icon(Icons.image_outlined, color: AppColors.info),
-              title: const Text('Export as Image'),
+              title: const Text('Share as image'),
               subtitle: const Text('The same record as a PNG picture'),
-              onTap: () => Navigator.pop(context, RecordFormat.png),
+              onTap: () => Navigator.pop(
+                  context, (RecordFormat.png, RecordAction.share)),
             ),
             const SizedBox(height: 8),
           ],
         ),
       ),
     );
-    if (format != null) await _export(format);
+    if (choice != null) await _export(choice.$1, choice.$2);
   }
 
-  /// Builds the record from what is on the phone (works offline) and shares
-  /// it (phones) or downloads it (web).
-  Future<void> _export(RecordFormat format) async {
+  /// "Preparing document…" over the page while the record is built.
+  void _showPreparing() {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const PopScope(
+        canPop: false,
+        child: AlertDialog(
+          content: Row(
+            children: [
+              SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(strokeWidth: 2.5),
+              ),
+              SizedBox(width: 16),
+              Text('Preparing document…'),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Builds the record from what is on the phone (works offline), always
+  /// with the signed-in user's own school, then shares or saves it.
+  Future<void> _export(RecordFormat format, RecordAction action) async {
     final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context, rootNavigator: true);
     final refs = context.read<AuthController>().tenant!;
     final s = widget.student;
     setState(() => _exporting = true);
+    _showPreparing();
+    var preparing = true;
+    void closePreparing() {
+      if (preparing) navigator.pop();
+      preparing = false;
+    }
+
     try {
       final extras = await _extras;
-      final meta =
-          SchoolMeta.fromMap(asMap((await readOnce(refs.profile)).value));
+      final profile = asMap((await readOnce(refs.profile)).value);
+      final meta = SchoolMeta.fromMap(profile);
       // Images still waiting to upload are taken straight from the phone.
       final queue = UploadQueue.instance;
       final localPhoto = queue?.localPhoto(s.id);
@@ -150,7 +197,6 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen> {
             ? File(localStamp).readAsBytes()
             : ExportImages.load(ExportImages.stampUrl(meta.stampUrl)),
       ]);
-      final now = DateTime.now();
       final history = extras.history;
       final data = StudentRecordData(
         student: s,
@@ -166,24 +212,35 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen> {
               date: r.promotedAt == null ? '' : _date.format(r.promotedAt!),
             ),
         ],
+        schoolId: refs.schoolId,
         schoolName: meta.name,
         schoolAddress: meta.address,
         schoolPhone: meta.phone,
         schoolEmail: meta.email,
+        // The app has no motto field yet; printed only if one is on the
+        // school profile.
+        motto: (profile['motto'] ?? '').toString(),
         headName: meta.headName,
         badge: images[0],
         photo: images[1],
         stamp: images[2],
-        exportedAt: now,
+        exportedAt: DateTime.now(),
       );
       final bytes = await StudentRecordExport.build(data, format);
-      await StudentRecordExport.deliver(
-          StudentRecordExport.fileName(s, now, format), bytes, format);
+      closePreparing();
+      final name = StudentRecordExport.fileName(s, format);
+      final done =
+          await StudentRecordExport.deliver(name, bytes, format, action);
+      if (done && action == RecordAction.save) {
+        messenger.showSnackBar(SnackBar(
+            content: Text(kIsWeb ? 'Downloaded $name' : 'Saved $name')));
+      }
     } catch (e) {
       debugPrint('Student export failed: $e');
       messenger.showSnackBar(
           const SnackBar(content: Text('Could not export. Please try again.')));
     } finally {
+      closePreparing();
       if (mounted) setState(() => _exporting = false);
     }
   }
