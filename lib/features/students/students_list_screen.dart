@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -6,6 +8,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../app/routes.dart';
+import '../../core/internet_check.dart';
 import '../../core/offline_write.dart';
 import '../../core/rtdb.dart';
 import '../../models/school.dart';
@@ -15,9 +18,12 @@ import '../../models/student.dart';
 import '../../services/class_service.dart';
 import '../../services/export/export_images.dart';
 import '../../services/export/export_table.dart';
+import '../../services/export/photo_placeholder.dart';
 import '../../services/file_actions.dart';
 import '../../services/school_service.dart';
+import '../../services/student_photo_cache.dart';
 import '../../services/student_service.dart';
+import '../../services/upload_queue.dart';
 import '../../state/auth_controller.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/export_button.dart';
@@ -151,6 +157,7 @@ class _StudentsListScreenState extends State<StudentsListScreen> {
             'on this phone yet. Connect to the internet once and try again.');
       }
       final logo = await ExportImages.load(ExportImages.badgeUrl(meta.logoUrl));
+      final photos = await _registerPhotos(shown);
       final date = DateFormat('dd/MM/yyyy');
       String d(DateTime? v) => v == null ? '-' : date.format(v);
       String t(String? v) => (v ?? '').trim().isEmpty ? '-' : v!.trim();
@@ -161,6 +168,7 @@ class _StudentsListScreenState extends State<StudentsListScreen> {
         heading: 'Pupils Register - ${className ?? level?.label ?? 'All classes'}',
         schoolAddress: meta.address,
         logo: logo,
+        rowPhotos: photos,
         layout: ExportLayout.register,
         filters: [
           if (multiLevel) level?.label ?? 'All levels',
@@ -442,20 +450,20 @@ const _registerColumns = [
   // Widths fit the longest word or date at 7 pt on A4 landscape, so nothing
   // is broken mid-word ("No." is 0.7 ≈ 16 pt; 1.0 ≈ 23 pt).
   ExportColumn('Student ID', flex: 2.0),
-  ExportColumn('Full name', flex: 2.14),
+  ExportColumn('Full name', flex: 1.8),
   ExportColumn('Gender', flex: 1.22),
   ExportColumn('Date of birth', flex: 1.75, isDate: true),
   ExportColumn('Level', flex: 1.79),
   ExportColumn('Class', flex: 1.4),
-  ExportColumn('Department', flex: 1.79),
+  ExportColumn('Department', flex: 1.9),
   ExportColumn('Admission year', flex: 1.75),
   ExportColumn('Admission date', flex: 1.75, isDate: true),
-  ExportColumn('Status', flex: 1.75),
+  ExportColumn('Status', flex: 1.85),
   ExportColumn('Promotion status', flex: 1.62),
   ExportColumn('Last promoted', flex: 1.75, isDate: true),
-  ExportColumn('Guardian name', flex: 1.92),
-  ExportColumn('Guardian phone', flex: 1.83),
-  ExportColumn('Home address', flex: 2.1),
+  ExportColumn('Guardian name', flex: 1.75),
+  ExportColumn('Guardian phone', flex: 1.75),
+  ExportColumn('Home address', flex: 1.7),
   ExportColumn('NPSE index no.', flex: 1.75),
   ExportColumn('NPSE year', flex: 0.96),
   ExportColumn('BECE index no.', flex: 1.75),
@@ -471,4 +479,38 @@ String _promotionStatus(Student s) {
   if (s.status == StudentStatus.graduated) return 'Graduated';
   if (s.isRepeater()) return 'Repeater';
   return s.lastPromotedAt != null ? 'Promoted' : 'Not yet promoted';
+}
+
+/// One passport photo per pupil, in [shown] order, for the register's photo
+/// column: a photo still waiting to upload, else the copy saved on the phone,
+/// else a download when online, else the "No Photo" placeholder. Loads a few
+/// at a time; a photo that can't be had never stops the export.
+Future<List<Uint8List?>> _registerPhotos(List<Student> shown) async {
+  final placeholder = await photoPlaceholderPng();
+  final online = await hasInternet();
+  final cache = StudentPhotoCache.instance;
+  final queue = UploadQueue.instance;
+
+  Future<Uint8List?> one(Student s) async {
+    try {
+      final waiting = queue?.localPhoto(s.id);
+      if (waiting != null) return await File(waiting).readAsBytes();
+      return await cache.load(s.id, s.photoUrl, download: online) ??
+          placeholder;
+    } catch (_) {
+      return placeholder;
+    }
+  }
+
+  final photos = List<Uint8List?>.filled(shown.length, null);
+  var next = 0;
+  Future<void> worker() async {
+    while (next < shown.length) {
+      final i = next++;
+      photos[i] = await one(shown[i]);
+    }
+  }
+
+  await Future.wait([for (var w = 0; w < 6; w++) worker()]);
+  return photos;
 }

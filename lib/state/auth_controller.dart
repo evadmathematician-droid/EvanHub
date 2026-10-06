@@ -16,6 +16,7 @@ import '../services/auth_service.dart';
 import '../services/pending_event_store.dart';
 import '../services/school_service.dart';
 import '../services/session_cache.dart';
+import '../services/student_photo_cache.dart';
 import '../services/upload_queue.dart';
 
 enum AuthStatus {
@@ -396,8 +397,9 @@ class AuthController extends ChangeNotifier {
 
   /// Signs out and leaves nothing of this account on the phone's to-do list:
   /// stops keeping the school synced, drops database changes not yet sent,
-  /// queued photos and event posts, and forgets the saved session — so the
-  /// next account starts clean and needs a fresh online sign-in. Buttons
+  /// queued photos and event posts, saved pupil photos, and forgets the
+  /// saved session — so the next account starts clean and needs a fresh
+  /// online sign-in. Buttons
   /// call this through `confirmSignOut`, which warns about unsynced changes.
   Future<void> signOut() async {
     // While still signed in, so releasing the paths isn't refused.
@@ -412,6 +414,7 @@ class AuthController extends ChangeNotifier {
       try {
         await UploadQueue.instance?.clearAll();
         await PendingEventStore.instance?.clearAll();
+        await StudentPhotoCache.instance.clearAll();
       } catch (e) {
         debugPrint('Could not clear queued uploads: $e');
       }

@@ -5,6 +5,7 @@ import 'package:archive/archive.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
+import 'docx_images.dart';
 import 'export_table.dart';
 
 /// The full pupils register ([ExportLayout.register]) in PDF, Excel and Word:
@@ -33,8 +34,24 @@ final _muted = PdfColor.fromHex('#$_mutedHex');
 String _safe(String s) =>
     String.fromCharCodes(s.runes.map((r) => r <= 0xFF ? r : 0x3F));
 
+/// Passport thumbnail in the PDF photo column, in points (35 × 45 shape).
+const _thumbW = 22.0, _thumbH = 28.0;
+
 Future<Uint8List> buildRegisterPdf(ExportTable t) async {
+  // A photo that turns out unreadable must never stop the export: build
+  // again without the photo column.
+  try {
+    return await _registerPdf(t, withPhotos: t.rowPhotos != null);
+  } catch (_) {
+    if (t.rowPhotos == null) rethrow;
+    return _registerPdf(t, withPhotos: false);
+  }
+}
+
+Future<Uint8List> _registerPdf(ExportTable t, {required bool withPhotos}) async {
   final columns = t.numberedColumns;
+  final photos = withPhotos ? t.rowPhotos! : null;
+  final shift = photos == null ? 0 : 1;
   final doc = pw.Document(
       title: _safe(_heading(t)),
       author: _safe(t.schoolName),
@@ -63,7 +80,7 @@ Future<Uint8List> buildRegisterPdf(ExportTable t) async {
   final rows = t.numberedRows;
   doc.addPage(pw.MultiPage(
     pageFormat: PdfPageFormat.a4.landscape,
-    margin: const pw.EdgeInsets.fromLTRB(12, 16, 12, 14),
+    margin: const pw.EdgeInsets.fromLTRB(8, 16, 8, 14),
     header: (context) => _pdfLetterhead(t, logo),
     footer: (context) => pw.Container(
       margin: const pw.EdgeInsets.only(top: 6),
@@ -84,8 +101,9 @@ Future<Uint8List> buildRegisterPdf(ExportTable t) async {
       pw.Table(
         border: pw.TableBorder.all(color: _line, width: 0.4),
         columnWidths: {
+          if (photos != null) 0: const pw.FixedColumnWidth(_thumbW + 3),
           for (var i = 0; i < columns.length; i++)
-            i: pw.FlexColumnWidth(columns[i].flex),
+            i + shift: pw.FlexColumnWidth(columns[i].flex),
         },
         children: [
           // Repeated at the top of every page.
@@ -94,6 +112,7 @@ Future<Uint8List> buildRegisterPdf(ExportTable t) async {
             decoration: pw.BoxDecoration(color: _primary),
             verticalAlignment: pw.TableCellVerticalAlignment.middle,
             children: [
+              if (photos != null) cell('Photo', header: true, center: true),
               for (var i = 0; i < columns.length; i++)
                 cell(columns[i].title, header: true, center: i == 0),
             ],
@@ -103,6 +122,8 @@ Future<Uint8List> buildRegisterPdf(ExportTable t) async {
               decoration:
                   r.isOdd ? pw.BoxDecoration(color: _stripe) : null,
               children: [
+                if (photos != null)
+                  _thumb(r < photos.length ? photos[r] : null),
                 for (var i = 0; i < columns.length; i++)
                   cell(rows[r][i], center: i == 0),
               ],
@@ -121,6 +142,22 @@ Future<Uint8List> buildRegisterPdf(ExportTable t) async {
   ));
   return doc.save();
 }
+
+/// One row's passport thumbnail with a hairline frame; an empty cell when
+/// there is no photo.
+pw.Widget _thumb(Uint8List? bytes) => pw.Padding(
+      padding: const pw.EdgeInsets.all(1.5),
+      child: bytes == null
+          ? pw.SizedBox(width: _thumbW, height: _thumbH)
+          : pw.Container(
+              width: _thumbW,
+              height: _thumbH,
+              decoration: pw.BoxDecoration(
+                  border: pw.Border.all(color: _line, width: 0.4)),
+              child: pw.ClipRect(
+                  child: pw.Image(pw.MemoryImage(bytes), fit: pw.BoxFit.cover)),
+            ),
+    );
 
 /// Badge, bold school name and address on the left; the register title,
 /// filters, date printed and total on the right; a rule underneath.
@@ -414,11 +451,16 @@ Uint8List buildRegisterDocx(ExportTable t) {
   // A4 landscape in twips with 1 cm margins.
   const pageW = 16838, pageH = 11906, margin = 567;
   const usable = pageW - 2 * margin;
+  // Passport thumbnail column (35 × 45 shape) when there are photos.
+  const photoW = 600, thumbW = 510, thumbH = 655;
 
+  final images = DocxImages();
+  final photos = t.rowPhotos;
   final columns = t.numberedColumns;
   final totalFlex = columns.fold<double>(0, (sum, c) => sum + c.flex);
+  final rest = photos == null ? usable : usable - photoW;
   final widths = [
-    for (final c in columns) (usable * c.flex / totalFlex).floor(),
+    for (final c in columns) (rest * c.flex / totalFlex).floor(),
   ];
 
   String run(String text, {int size = 14, bool bold = false, String? color}) =>
@@ -430,14 +472,24 @@ Uint8List buildRegisterDocx(ExportTable t) {
           {int size = 14, bool bold = false, String? color, String align = 'left', int after = 0}) =>
       '<w:p><w:pPr><w:spacing w:before="0" w:after="$after"/><w:jc w:val="$align"/></w:pPr>'
       '${run(text, size: size, bold: bold, color: color)}</w:p>';
-  String cell(String text, int width,
+  String cellXml(String content, int width,
           {bool header = false, String? fill, String align = 'left'}) =>
       '<w:tc><w:tcPr><w:tcW w:w="$width" w:type="dxa"/>'
       '${fill == null ? '' : '<w:shd w:val="clear" w:color="auto" w:fill="$fill"/>'}'
       '<w:vAlign w:val="${header ? 'center' : 'top'}"/></w:tcPr>'
       '<w:p><w:pPr><w:spacing w:before="20" w:after="20"/><w:jc w:val="$align"/></w:pPr>'
-      '${run(text, size: header ? 13 : 14, bold: header, color: header ? 'FFFFFF' : null)}'
-      '</w:p></w:tc>';
+      '$content</w:p></w:tc>';
+  String cell(String text, int width,
+          {bool header = false, String? fill, String align = 'left'}) =>
+      cellXml(
+          run(text,
+              size: header ? 13 : 14,
+              bold: header,
+              color: header ? 'FFFFFF' : null),
+          width,
+          header: header,
+          fill: fill,
+          align: align);
 
   const border = 'w:val="single" w:sz="4" w:space="0" w:color="$_lineHex"';
   final table = StringBuffer()
@@ -447,10 +499,15 @@ Uint8List buildRegisterDocx(ExportTable t) {
         '<w:tblLayout w:type="fixed"/>'
         '<w:tblCellMar><w:left w:w="45" w:type="dxa"/><w:right w:w="45" w:type="dxa"/></w:tblCellMar>'
         '</w:tblPr><w:tblGrid>')
+    ..write(photos == null ? '' : '<w:gridCol w:w="$photoW"/>')
     ..writeAll([for (final w in widths) '<w:gridCol w:w="$w"/>'])
     ..write('</w:tblGrid>')
     // Bold heading row, repeated at the top of every page.
     ..write('<w:tr><w:trPr><w:tblHeader/><w:cantSplit/></w:trPr>')
+    ..write(photos == null
+        ? ''
+        : cell('Photo', photoW,
+            header: true, fill: _primaryHex, align: 'center'))
     ..writeAll([
       for (var i = 0; i < columns.length; i++)
         cell(columns[i].title, widths[i],
@@ -459,10 +516,20 @@ Uint8List buildRegisterDocx(ExportTable t) {
     ..write('</w:tr>');
   final rows = t.numberedRows;
   for (var r = 0; r < rows.length; r++) {
+    final fill = r.isOdd ? _stripeHex : null;
     table.write('<w:tr><w:trPr><w:cantSplit/></w:trPr>');
+    if (photos != null) {
+      // An unreadable photo is simply left out (an empty cell).
+      table.write(cellXml(
+          images.inline(r < photos.length ? photos[r] : null, thumbW, thumbH,
+              cover: true),
+          photoW,
+          fill: fill,
+          align: 'center'));
+    }
     for (var i = 0; i < columns.length; i++) {
       table.write(cell(rows[r][i], widths[i],
-          fill: r.isOdd ? _stripeHex : null, align: i == 0 ? 'center' : 'left'));
+          fill: fill, align: i == 0 ? 'center' : 'left'));
     }
     table.write('</w:tr>');
   }
@@ -475,8 +542,7 @@ Uint8List buildRegisterDocx(ExportTable t) {
   ].join('     |     ');
 
   final document = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-      '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" '
-      'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+      '<w:document ${DocxImages.namespaces}>'
       '<w:body>'
       '${para(t.schoolName.trim().toUpperCase(), size: 30, bold: true, color: _primaryHex, align: 'center')}'
       '${t.schoolAddress.trim().isEmpty ? '' : para(t.schoolAddress.trim(), size: 17, align: 'center')}'
@@ -501,16 +567,16 @@ Uint8List buildRegisterDocx(ExportTable t) {
       '</w:p></w:ftr>';
 
   final archive = Archive();
-  void add(String name, String xml) {
-    final bytes = utf8.encode(xml);
-    archive.addFile(ArchiveFile(name, bytes.length, bytes));
-  }
+  void addBytes(String name, List<int> bytes) =>
+      archive.addFile(ArchiveFile(name, bytes.length, bytes));
+  void add(String name, String xml) => addBytes(name, utf8.encode(xml));
 
   add('[Content_Types].xml',
       '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
       '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
       '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
       '<Default Extension="xml" ContentType="application/xml"/>'
+      '${DocxImages.contentTypes}'
       '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
       '<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>'
       '</Types>');
@@ -523,8 +589,11 @@ Uint8List buildRegisterDocx(ExportTable t) {
       '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
       '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
       '<Relationship Id="rIdFooter1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>'
-      '</Relationships>');
+      '${images.relationships}</Relationships>');
   add('word/document.xml', document);
   add('word/footer1.xml', footer);
+  for (final (path, bytes) in images.files) {
+    addBytes(path, bytes);
+  }
   return Uint8List.fromList(ZipEncoder().encode(archive)!);
 }

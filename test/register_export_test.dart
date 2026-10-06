@@ -71,6 +71,49 @@ void main() {
     expect(pages, greaterThan(1));
   });
 
+  group('photo column', () {
+    // Smallest valid PNG: 1×1 pixel.
+    final png = base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==');
+
+    ExportTable withPhotos(List<Uint8List?> photos) => ExportTable(
+          schoolName: 'S',
+          title: 'Pupils Register',
+          layout: ExportLayout.register,
+          columns: columns,
+          rows: [
+            for (var i = 0; i < photos.length; i++)
+              ['EG-$i', 'Pupil $i', '04/03/2012', '-', 'Road'],
+          ],
+          rowPhotos: photos,
+        );
+
+    test('Word: one embedded thumbnail per pupil with a photo', () {
+      final docx = buildRegisterDocx(withPhotos([png, null, png]));
+      final media = ZipDecoder()
+          .decodeBytes(docx)
+          .files
+          .where((f) => f.name.startsWith('word/media/'));
+      expect(media.length, 2);
+      expect(part(docx, 'word/document.xml'), contains('>Photo<'));
+    });
+
+    test('a broken photo never stops the export', () async {
+      final broken = withPhotos([Uint8List.fromList([0xFF, 0xD8, 1, 2, 3])]);
+      final pdf = await buildRegisterPdf(broken);
+      expect(String.fromCharCodes(pdf.take(4)), '%PDF');
+      final docx = buildRegisterDocx(broken);
+      expect(ZipDecoder().decodeBytes(docx).files.where((f) => f.name.startsWith('word/media/')),
+          isEmpty);
+    });
+
+    test('Excel stays without photos', () {
+      final xlsx = buildRegisterXlsx(withPhotos([png]));
+      expect(ZipDecoder().decodeBytes(xlsx).files.any((f) => f.name.contains('media')),
+          isFalse);
+    });
+  });
+
   test('other lists keep the standard layout', () {
     final t = ExportTable(
         schoolName: 'S', title: 'Teachers', columns: columns, rows: const []);

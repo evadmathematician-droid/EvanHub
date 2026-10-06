@@ -324,13 +324,17 @@ pw.Widget _summary(StudentRecordData d, pw.ImageProvider? photo) {
         ),
       ),
       pw.SizedBox(width: 12),
+      // Passport-size frame (35 × 45 proportions) with a thin border and a
+      // white mat; the photo fills it, trimmed evenly if its shape differs.
       pw.Container(
-        width: 78,
-        height: 94,
+        width: 82,
+        height: 104,
+        padding: const pw.EdgeInsets.all(2),
         decoration: pw.BoxDecoration(
-            border: pw.Border.all(color: _line), color: _band),
+            border: pw.Border.all(color: _muted, width: 0.7),
+            color: PdfColors.white),
         child: photo != null
-            ? pw.Image(photo, fit: pw.BoxFit.cover)
+            ? pw.ClipRect(child: pw.Image(photo, fit: pw.BoxFit.cover))
             : pw.Center(
                 child: pw.Text('No photo',
                     style: pw.TextStyle(fontSize: 8.5, color: _muted))),

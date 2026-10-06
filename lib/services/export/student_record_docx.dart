@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 
+import 'docx_images.dart';
 import 'student_record_content.dart';
 import 'student_record_pdf.dart';
 
@@ -28,74 +29,17 @@ Uint8List buildStudentRecordDocx(StudentRecordData d) {
   addText('word/document.xml', body);
   addText('word/footer1.xml', _footer(d));
   addText('word/_rels/document.xml.rels', doc.relationships());
-  for (final image in doc.images) {
-    add('word/media/${image.fileName}', image.bytes);
+  for (final (path, bytes) in doc.images.files) {
+    add(path, bytes);
   }
   return Uint8List.fromList(ZipEncoder().encode(archive)!);
 }
 
-// --- Images ----------------------------------------------------------------
-
-/// A PNG or JPEG with its pixel size, read from the file header. Anything
-/// else (or an unreadable file) is null and simply left out.
-class _Picture {
-  _Picture(this.bytes, this.ext, this.width, this.height);
-
-  final Uint8List bytes;
-  final String ext;
-  final int width;
-  final int height;
-  late String fileName;
-  late String relId;
-
-  static _Picture? read(Uint8List? b) {
-    if (b == null || b.length < 24) return null;
-    int be16(int i) => (b[i] << 8) | b[i + 1];
-    int be32(int i) =>
-        (b[i] << 24) | (b[i + 1] << 16) | (b[i + 2] << 8) | b[i + 3];
-    // PNG: signature, then the IHDR chunk with width and height.
-    if (b[0] == 0x89 && b[1] == 0x50 && b[2] == 0x4E && b[3] == 0x47) {
-      final w = be32(16), h = be32(20);
-      return w > 0 && h > 0 ? _Picture(b, 'png', w, h) : null;
-    }
-    // JPEG: walk the segments to the frame header (SOF0–SOF15).
-    if (b[0] == 0xFF && b[1] == 0xD8) {
-      var i = 2;
-      while (i + 9 < b.length) {
-        if (b[i] != 0xFF) {
-          i++;
-          continue;
-        }
-        final marker = b[i + 1];
-        if (marker >= 0xC0 &&
-            marker <= 0xCF &&
-            marker != 0xC4 &&
-            marker != 0xC8 &&
-            marker != 0xCC) {
-          final h = be16(i + 5), w = be16(i + 7);
-          return w > 0 && h > 0 ? _Picture(b, 'jpeg', w, h) : null;
-        }
-        if (marker == 0xD8 ||
-            marker == 0x01 ||
-            (marker >= 0xD0 && marker <= 0xD7)) {
-          i += 2;
-          continue;
-        }
-        i += 2 + be16(i + 2);
-      }
-    }
-    return null;
-  }
-}
-
 // --- Writer ----------------------------------------------------------------
 
-/// Dimensions are in twips (1/1440 inch) for layout and EMU (1/914400 inch)
-/// for pictures.
+/// Dimensions are in twips (1/1440 inch).
 class _DocxWriter {
-  final images = <_Picture>[];
-
-  static const _emuPerTwip = 635;
+  final images = DocxImages();
 
   /// A4 portrait, 1.1 cm side margins.
   static const _pageW = 11906;
@@ -105,47 +49,16 @@ class _DocxWriter {
   static const _marginBottom = 680;
   static const _usable = _pageW - 2 * _marginX;
 
-  String relationships() {
-    final sb = StringBuffer(
+  String relationships() =>
       '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
       '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-      '<Relationship Id="rIdFooter1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>',
-    );
-    for (final p in images) {
-      sb.write(
-        '<Relationship Id="${p.relId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/${p.fileName}"/>',
-      );
-    }
-    sb.write('</Relationships>');
-    return sb.toString();
-  }
+      '<Relationship Id="rIdFooter1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>'
+      '${images.relationships}</Relationships>';
 
-  /// An inline picture scaled to fit a [boxW] × [boxH] twip box, keeping its
-  /// proportions. Empty when there is no usable image.
-  String picture(Uint8List? bytes, int boxW, int boxH) {
-    final p = _Picture.read(bytes);
-    if (p == null) return '';
-    final n = images.length + 1;
-    p
-      ..fileName = 'image$n.${p.ext}'
-      ..relId = 'rIdImg$n';
-    images.add(p);
-    final scale = [
-      boxW / p.width,
-      boxH / p.height,
-    ].reduce((a, b) => a < b ? a : b);
-    final cx = (p.width * scale * _emuPerTwip).round();
-    final cy = (p.height * scale * _emuPerTwip).round();
-    return '<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0">'
-        '<wp:extent cx="$cx" cy="$cy"/><wp:docPr id="$n" name="Picture $n"/>'
-        '<wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr>'
-        '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">'
-        '<pic:pic><pic:nvPicPr><pic:cNvPr id="$n" name="${p.fileName}"/><pic:cNvPicPr/></pic:nvPicPr>'
-        '<pic:blipFill><a:blip r:embed="${p.relId}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>'
-        '<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="$cx" cy="$cy"/></a:xfrm>'
-        '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic>'
-        '</a:graphicData></a:graphic></wp:inline></w:drawing></w:r>';
-  }
+  /// An inline picture fitted to a [boxW] × [boxH] twip box (see
+  /// [DocxImages.inline]). Empty when there is no usable image.
+  String picture(Uint8List? bytes, int boxW, int boxH, {bool cover = false}) =>
+      images.inline(bytes, boxW, boxH, cover: cover);
 
   String body(StudentRecordData d) {
     final sb = StringBuffer()
@@ -261,9 +174,16 @@ class _DocxWriter {
         '${_run(value, size: 21, bold: true)}</w:p>',
       );
     }
-    final photo = picture(d.photo, photoW - 120, 1900);
+    // Passport-size frame (35 × 45 proportions) with a thin border; the
+    // photo fills it, trimmed evenly if its shape differs.
+    final photo = picture(d.photo, photoW - 140, 1930, cover: true);
     final photoCell = photo.isNotEmpty
-        ? _cell(photoW, '<w:p><w:pPr><w:jc w:val="right"/></w:pPr>$photo</w:p>')
+        ? _cell(
+            photoW,
+            '<w:p><w:pPr><w:spacing w:before="0" w:after="0"/>'
+            '<w:jc w:val="center"/></w:pPr>$photo</w:p>',
+            borderColor: _muted,
+          )
         : _cell(
             photoW,
             _para(

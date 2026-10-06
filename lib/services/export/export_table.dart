@@ -59,6 +59,7 @@ class ExportTable {
     this.heading,
     this.schoolAddress = '',
     this.logo,
+    this.rowPhotos,
   }) : generatedAt = generatedAt ?? DateTime.now();
 
   final String schoolName;
@@ -77,6 +78,11 @@ class ExportTable {
   /// Register layout only: the school's address and badge for the letterhead.
   final String schoolAddress;
   final Uint8List? logo;
+
+  /// Register layout only: a small passport photo per row (same order as
+  /// [rows]), shown as the first column in PDF and Word. Null for no photo
+  /// column; a null entry leaves that row's cell empty.
+  final List<Uint8List?>? rowPhotos;
 
   /// Wide tables print sideways.
   bool get landscape => columns.length > 6;

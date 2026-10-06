@@ -9,6 +9,7 @@ import '../force_update/force_update_gate.dart';
 import '../services/event_sync_service.dart';
 import '../services/pending_event_store.dart';
 import '../services/upload_queue.dart';
+import '../services/photo_prefetch_service.dart';
 import '../services/upload_sync_service.dart';
 import '../state/auth_controller.dart';
 import '../state/sync_monitor.dart';
@@ -28,6 +29,7 @@ class _EvangelistGlobalAppState extends State<EvangelistGlobalApp> {
   final _messengerKey = GlobalKey<ScaffoldMessengerState>();
   EventSyncService? _eventSync;
   UploadSyncService? _uploadSync;
+  PhotoPrefetchService? _photoPrefetch;
   SyncMonitor? _syncMonitor;
   StreamSubscription<int>? _uploadedSub;
 
@@ -52,7 +54,11 @@ class _EvangelistGlobalAppState extends State<EvangelistGlobalApp> {
     if (uploads != null) {
       _uploadSync = UploadSyncService(_auth, uploads)..start();
     }
-    if (!kIsWeb) _syncMonitor = SyncMonitor(_auth)..start();
+    if (!kIsWeb) {
+      _syncMonitor = SyncMonitor(_auth)..start();
+      // Pupil photos saved on the phone for offline exports.
+      _photoPrefetch = PhotoPrefetchService(_auth)..start();
+    }
   }
 
   @override
@@ -60,6 +66,7 @@ class _EvangelistGlobalAppState extends State<EvangelistGlobalApp> {
     _uploadedSub?.cancel();
     _eventSync?.dispose();
     _uploadSync?.dispose();
+    _photoPrefetch?.dispose();
     _syncMonitor?.dispose();
     _auth.dispose();
     super.dispose();

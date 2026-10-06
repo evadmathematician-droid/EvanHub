@@ -11,9 +11,11 @@ import '../../models/promotion_record.dart';
 import '../../models/school.dart';
 import '../../models/student.dart';
 import '../../services/export/export_images.dart';
+import '../../services/export/photo_placeholder.dart';
 import '../../services/export/student_record_export.dart';
 import '../../services/export/student_record_pdf.dart';
 import '../../services/promotion_service.dart';
+import '../../services/student_photo_cache.dart';
 import '../../services/upload_queue.dart';
 import '../../state/auth_controller.dart';
 import '../../theme/app_colors.dart';
@@ -84,10 +86,21 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen> {
     super.initState();
     _extras = _loadExtras();
     // So a later export works offline.
-    ExportImages.prefetch([ExportImages.photoUrl(widget.student.photoUrl)]);
+    StudentPhotoCache.instance
+        .keep(widget.student.id, widget.student.photoUrl);
   }
 
   bool _exporting = false;
+
+  /// The pupil's photo for an export: the copy saved on the phone, else a
+  /// download when online. Null when there is none to be had.
+  Future<Uint8List?> _savedPhoto(Student s) async {
+    try {
+      return await StudentPhotoCache.instance.load(s.id, s.photoUrl);
+    } catch (_) {
+      return null;
+    }
+  }
 
   String _className(String? id, _Extras? extras) {
     if (id == null || id.isEmpty) return 'Not assigned';
@@ -231,7 +244,7 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen> {
         ExportImages.load(ExportImages.badgeUrl(meta.logoUrl)),
         localPhoto != null
             ? File(localPhoto).readAsBytes()
-            : ExportImages.load(ExportImages.photoUrl(s.photoUrl)),
+            : _savedPhoto(s),
         localStamp != null
             ? File(localStamp).readAsBytes()
             : ExportImages.load(ExportImages.stampUrl(meta.stampUrl)),
@@ -261,7 +274,9 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen> {
         motto: (profile['motto'] ?? '').toString(),
         headName: meta.headName,
         badge: images[0],
-        photo: images[1],
+        // Never stops the export: no photo (or none saved while offline)
+        // gets the "No Photo" placeholder.
+        photo: images[1] ?? await photoPlaceholderPng(),
         stamp: images[2],
         exportedAt: DateTime.now(),
       );
@@ -334,10 +349,24 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen> {
               ),
             )
           else
-            TextButton.icon(
-              onPressed: _chooseExport,
-              icon: const Icon(Icons.ios_share),
-              label: const Text('Export'),
+            // Orange on the indigo bar, with near-black text: clearly visible
+            // on light and dark backgrounds alike.
+            Tooltip(
+              message: 'Export / Share',
+              child: FilledButton.icon(
+                onPressed: _chooseExport,
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.accent,
+                  foregroundColor: AppColors.textPrimary,
+                  minimumSize: const Size(48, 48),
+                  tapTargetSize: MaterialTapTargetSize.padded,
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  textStyle: const TextStyle(
+                      fontSize: 15, fontWeight: FontWeight.w700),
+                ),
+                icon: const Icon(Icons.ios_share, size: 20),
+                label: const Text('Export'),
+              ),
             ),
           const SizedBox(width: 8),
         ],
