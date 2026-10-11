@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../app/routes.dart';
 import '../../core/person_name.dart';
+import '../../core/phone.dart';
 import '../../models/school.dart';
 import '../../services/auth_service.dart';
 import '../../state/auth_controller.dart';
@@ -32,6 +33,14 @@ class _SchoolOnboardingScreenState extends State<SchoolOnboardingScreen> {
   final _schoolPhone = TextEditingController();
   final _schoolEmail = TextEditingController();
 
+  // School administrator contact, shown to people when Look Up is off.
+  final _contactName = TextEditingController();
+  final _contactPhone = TextEditingController();
+  final _contactWhatsApp = TextEditingController();
+
+  /// Look Up approval; unticked until the school chooses it.
+  bool _lookupApproved = false;
+
   final _adminName = TextEditingController();
   final _adminEmail = TextEditingController();
   final _adminPassword = TextEditingController();
@@ -56,6 +65,9 @@ class _SchoolOnboardingScreenState extends State<SchoolOnboardingScreen> {
       _address,
       _schoolPhone,
       _schoolEmail,
+      _contactName,
+      _contactPhone,
+      _contactWhatsApp,
       _adminName,
       _adminEmail,
       _adminPassword,
@@ -80,6 +92,10 @@ class _SchoolOnboardingScreenState extends State<SchoolOnboardingScreen> {
               address: _address.text.trim(),
               phone: _schoolPhone.text.trim(),
               email: _schoolEmail.text.trim(),
+              adminName: titleCaseName(_contactName.text),
+              adminPhone: _contactPhone.text.trim(),
+              adminWhatsApp: _contactWhatsApp.text.trim(),
+              lookupEnabled: _lookupApproved,
             ),
           );
       // Router redirect sends us to the dashboard once `users/{uid}` is written.
@@ -103,6 +119,14 @@ class _SchoolOnboardingScreenState extends State<SchoolOnboardingScreen> {
       _submit();
     }
   }
+
+  Widget _sectionTitle(String text) => Align(
+        alignment: Alignment.centerLeft,
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Text(text, style: Theme.of(context).textTheme.titleSmall),
+        ),
+      );
 
   void _back() {
     if (_step == 0) return;
@@ -194,6 +218,67 @@ class _SchoolOnboardingScreenState extends State<SchoolOnboardingScreen> {
                     decoration:
                         const InputDecoration(labelText: 'Contact email'),
                   ),
+                  const SizedBox(height: 20),
+                  _sectionTitle('Administrator contact'),
+                  TextFormField(
+                    controller: _contactName,
+                    textCapitalization: TextCapitalization.words,
+                    inputFormatters: nameInputFormatters,
+                    maxLength: 100,
+                    decoration: const InputDecoration(
+                        labelText: 'Administrator name *', counterText: ''),
+                    validator: (v) =>
+                        (v == null || v.trim().isEmpty) ? 'Required' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _contactPhone,
+                    keyboardType: TextInputType.phone,
+                    maxLength: 30,
+                    decoration: const InputDecoration(
+                      labelText: 'Administrator phone number *',
+                      hintText: 'e.g. 079 150 079',
+                      helperText: 'Parents and pupils may be shown this '
+                          'number if they need to contact your school.',
+                      helperMaxLines: 2,
+                      counterText: '',
+                    ),
+                    validator: (v) => phoneProblem(v, required: true),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _contactWhatsApp,
+                    keyboardType: TextInputType.phone,
+                    maxLength: 30,
+                    decoration: const InputDecoration(
+                        labelText: 'WhatsApp number (if different)',
+                        counterText: ''),
+                    validator: phoneProblem,
+                  ),
+                  const SizedBox(height: 20),
+                  _sectionTitle('Public Lookup'),
+                  CheckboxListTile(
+                    value: _lookupApproved,
+                    onChanged: (v) =>
+                        setState(() => _lookupApproved = v ?? false),
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    title: const Text(
+                      'I approve that pupils, parents and teachers of this '
+                      'school can look up their own records (results, '
+                      'position, promotion, remarks and fee balance) from the '
+                      "app's login screen using their ID, without logging in.",
+                      style: TextStyle(fontSize: 14),
+                    ),
+                  ),
+                  const Text(
+                    "Only someone who knows a pupil's exact ID can see that "
+                    "pupil's record. If you do not approve, your school will "
+                    'still appear in the Lookup list, but people will be asked '
+                    'to contact you. You can change this any time in Settings.',
+                    style: TextStyle(
+                        fontSize: 12.5, color: AppColors.textSecondary),
+                  ),
                 ],
               ),
             ),
@@ -266,6 +351,9 @@ class _SchoolOnboardingScreenState extends State<SchoolOnboardingScreen> {
               children: [
                 Text('School: ${_schoolName.text}'),
                 Text('Admin: ${_adminName.text} (${_adminEmail.text})'),
+                Text('Administrator contact: ${_contactName.text} '
+                    '(${_contactPhone.text})'),
+                Text('Public Lookup: ${_lookupApproved ? 'Approved' : 'Not approved'}'),
                 const SizedBox(height: 12),
                 const Text(
                   'A new isolated workspace will be created. Only members you '
