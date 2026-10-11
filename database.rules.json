@@ -91,6 +91,9 @@
         "name": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 120" },
         "logoUrl": { ".validate": "newData.isString() && newData.val().length <= 500 && (newData.val() === '' || newData.val().beginsWith('https://'))" },
         "town": { ".validate": "newData.isString() && newData.val().length <= 300" },
+        "location": { ".validate": "newData.isString() && newData.val().length <= 300" },
+        // false hides the school from the Look Up list.
+        "active": { ".validate": "newData.isBoolean()" },
         // Listed whether or not Look Up is approved; false = "contact us".
         "lookupEnabled": { ".validate": "newData.isBoolean()" },
         "adminName": { ".validate": "newData.isString() && newData.val().length <= 100" },
@@ -213,6 +216,8 @@
           "lookupEnabled": { ".validate": "newData.isBoolean()" },
           "lookupConsentAt": { ".validate": "newData.isNumber() && newData.val() <= now" },
           "lookupConsentBy": { ".validate": "newData.isString() && (newData.val() === auth.uid || newData.val() === data.val())" },
+          // Version of the public Look Up index last built (one-time backfill).
+          "publicIndexVersion": { ".validate": "newData.isNumber() && newData.val() >= 0" },
           // School administrator contact; phones as typed plus +232... for links.
           "adminName": { ".validate": "newData.isString() && newData.val().length <= 100" },
           "adminPhone": { ".validate": "newData.isString() && newData.val().length <= 30" },

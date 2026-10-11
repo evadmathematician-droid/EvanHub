@@ -39,6 +39,11 @@ class SchoolMeta {
   final String adminPhone;
   final String adminWhatsApp;
 
+  /// Version of the public Look Up index last built for this school (see
+  /// `PublicLookupService.publicIndexVersion`); null = never built. Kept
+  /// here only so saving the profile does not erase it.
+  final int? publicIndexVersion;
+
   const SchoolMeta({
     required this.name,
     this.logoUrl,
@@ -54,6 +59,7 @@ class SchoolMeta {
     this.adminName = '',
     this.adminPhone = '',
     this.adminWhatsApp = '',
+    this.publicIndexVersion,
   });
 
   /// Look Up is on unless the school switched it off.
@@ -78,6 +84,7 @@ class SchoolMeta {
         adminName: (map['adminName'] ?? '') as String,
         adminPhone: (map['adminPhone'] ?? '') as String,
         adminWhatsApp: (map['adminWhatsApp'] ?? '') as String,
+        publicIndexVersion: (map['publicIndexVersion'] as num?)?.toInt(),
       );
 
   Map<String, dynamic> toMap() => {
@@ -97,6 +104,7 @@ class SchoolMeta {
         'adminPhoneIntl': adminPhoneIntl,
         'adminWhatsApp': adminWhatsApp,
         'adminWhatsAppIntl': adminWhatsAppIntl,
+        'publicIndexVersion': publicIndexVersion,
       };
 
   SchoolMeta copyWith({
@@ -130,6 +138,7 @@ class SchoolMeta {
         adminName: adminName ?? this.adminName,
         adminPhone: adminPhone ?? this.adminPhone,
         adminWhatsApp: adminWhatsApp ?? this.adminWhatsApp,
+        publicIndexVersion: publicIndexVersion,
       );
 }
 

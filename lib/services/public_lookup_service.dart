@@ -4,6 +4,7 @@ import 'package:firebase_core/firebase_core.dart' show FirebaseException;
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/foundation.dart';
 
+import '../core/internet_check.dart';
 import '../core/offline_write.dart';
 import '../core/rtdb.dart';
 import '../core/tenant/tenant_refs.dart';
@@ -49,7 +50,8 @@ class PublicSchool {
         id: id,
         name: (m['name'] ?? '').toString(),
         logoUrl: (m['logoUrl'] ?? '').toString(),
-        town: (m['town'] ?? '').toString(),
+        // "location" since index version 1; "town" on older entries.
+        town: (m['location'] ?? m['town'] ?? '').toString(),
         // Missing = approved (schools listed before the choice existed).
         lookupEnabled: m['lookupEnabled'] != false,
         adminName: (m['adminName'] ?? '').toString(),
@@ -220,6 +222,12 @@ class PublicLookupService {
     }
   }
 
+  /// Version of the public index (`publicSchools` + `publicLookup`) this app
+  /// writes. A school whose `profile/publicIndexVersion` is lower gets its
+  /// whole index rebuilt ([publishAll]) the next time an admin signs in.
+  /// Raise it when the shape of the public records changes.
+  static const publicIndexVersion = 1;
+
   /// `publicSchools/{schoolId}` from the school's profile.
   void publishSchool(SchoolMeta meta) {
     if (meta.name.trim().isEmpty) return;
@@ -229,9 +237,13 @@ class PublicLookupService {
   /// Refreshes `publicSchools/{schoolId}` from the profile saved on this
   /// phone. Called whenever an admin reaches the app, so every school that
   /// is in use gets listed — including those registered before Look Up.
+  /// Then, once per school (tracked by `profile/publicIndexVersion`), it
+  /// rebuilds every pupil's and teacher's public record, so records saved
+  /// before Look Up existed can be found too.
   Future<void> refreshSchoolListing() async {
+    final Map<String, dynamic> profile;
     try {
-      final profile = asMap((await readOnce(_refs.profile)).value);
+      profile = asMap((await readOnce(_refs.profile)).value);
       final meta = SchoolMeta.fromMap(profile);
       if (meta.name.trim().isEmpty) return;
       // Schools registered before Look Up had no choice to make: they count
@@ -242,13 +254,36 @@ class PublicLookupService {
       publishSchool(meta);
     } catch (e) {
       debugPrint('School listing for Look Up not refreshed: $e');
+      return;
+    }
+    await _upgradeIndex(profile['publicIndexVersion']);
+  }
+
+  /// The one-time backfill: runs [publishAll] when the school's index is
+  /// older than [publicIndexVersion], then records the version. Online
+  /// only (it reads the whole school from the server); offline or on a
+  /// failure it tries again at the next sign-in. Safe to repeat.
+  Future<void> _upgradeIndex(Object? savedVersion) async {
+    final saved = savedVersion is num ? savedVersion.toInt() : 0;
+    if (saved >= publicIndexVersion) return;
+    try {
+      if (!await hasInternet()) return;
+      final count = await publishAll();
+      await _refs.profile.child('publicIndexVersion').set(publicIndexVersion);
+      debugPrint('Public lookup index v$publicIndexVersion built for $_sid: '
+          '$count record(s).');
+    } catch (e) {
+      debugPrint('Public lookup index not built, will retry: $e');
     }
   }
 
   static Map<String, Object?> _schoolMap(SchoolMeta meta) => {
         'name': meta.name.trim(),
         'logoUrl': meta.logoUrl ?? '',
+        'location': meta.address.trim(),
+        // Same as location, for app versions that read "town".
         'town': meta.address.trim(),
+        'active': true,
         'lookupEnabled': meta.lookupApproved,
         'adminName': meta.adminName.trim(),
         // International form (+232…) for Call / WhatsApp; null removes it.
@@ -435,7 +470,7 @@ class PublicLookupService {
     final snap = await _serverRead('publicSchools');
     return [
       for (final c in snap.children)
-        if (c.key != null && c.value is Map)
+        if (c.key != null && c.value is Map && asMap(c.value)['active'] != false)
           PublicSchool.fromMap(c.key!, asMap(c.value)),
     ].where((s) => s.name.trim().isNotEmpty).toList()
       ..sort((a, b) => compareText(a.name, b.name));
