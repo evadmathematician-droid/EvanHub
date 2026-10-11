@@ -1,0 +1,11 @@
+{
+  "name": "evangelist-global-tools",
+  "private": true,
+  "description": "One-time maintenance scripts for the Evangelist Global database.",
+  "scripts": {
+    "backfill-schools": "node backfill_public_schools.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.0.0"
+  }
+}

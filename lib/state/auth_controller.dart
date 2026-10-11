@@ -14,6 +14,7 @@ import '../models/school.dart';
 import '../models/user_role.dart';
 import '../services/auth_service.dart';
 import '../services/pending_event_store.dart';
+import '../services/public_lookup_service.dart';
 import '../services/school_service.dart';
 import '../services/session_cache.dart';
 import '../services/student_photo_cache.dart';
@@ -243,7 +244,24 @@ class AuthController extends ChangeNotifier {
     _status = status;
     _rememberSession(status);
     _keepSchoolSynced(status);
+    _listSchoolForLookup(status);
     notifyListeners();
+  }
+
+  /// Schools already listed for Look Up during this run of the app.
+  final _listedSchools = <String>{};
+
+  /// When an admin reaches the app, (re)writes the school's entry in
+  /// `publicSchools`, once per school per run. This lists every school in
+  /// use, including those registered before Look Up existed. Queued
+  /// offline like any other save.
+  void _listSchoolForLookup(AuthStatus status) {
+    final refs = tenant;
+    if (status != AuthStatus.ready || !role.canManageSchool || refs == null) {
+      return;
+    }
+    if (!_listedSchools.add(refs.schoolId)) return;
+    unawaited(PublicLookupService(refs).refreshSchoolListing());
   }
 
   /// Paths kept permanently synced on this phone, by path.

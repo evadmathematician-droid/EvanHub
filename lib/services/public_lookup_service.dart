@@ -30,6 +30,12 @@ class LookupOfflineException implements Exception {
   const LookupOfflineException();
 }
 
+/// Thrown by the public reads when the database rules refuse them (the
+/// public-read rules are not deployed).
+class LookupNotSetUpException implements Exception {
+  const LookupNotSetUpException();
+}
+
 /// Keeps the two public nodes in step with the school's own data, and reads
 /// them for the Look Up screen (no sign-in needed):
 ///  - `publicSchools/{schoolId}` — name, logo and town only;
@@ -157,8 +163,22 @@ class PublicLookupService {
   }
 
   /// `publicSchools/{schoolId}` from the school's profile.
-  void publishSchool(SchoolMeta meta) =>
-      _publish({'publicSchools/$_sid': _schoolMap(meta)});
+  void publishSchool(SchoolMeta meta) {
+    if (meta.name.trim().isEmpty) return;
+    _publish({'publicSchools/$_sid': _schoolMap(meta)});
+  }
+
+  /// Refreshes `publicSchools/{schoolId}` from the profile saved on this
+  /// phone. Called whenever an admin reaches the app, so every school that
+  /// is in use gets listed — including those registered before Look Up.
+  Future<void> refreshSchoolListing() async {
+    try {
+      final meta = SchoolMeta.fromMap(asMap((await readOnce(_refs.profile)).value));
+      publishSchool(meta);
+    } catch (e) {
+      debugPrint('School listing for Look Up not refreshed: $e');
+    }
+  }
 
   static Map<String, Object?> _schoolMap(SchoolMeta meta) => {
         'name': meta.name.trim(),
@@ -211,7 +231,9 @@ class PublicLookupService {
 
     final total = records.length;
     onProgress?.call(0, total);
-    await _refs.root.update({'publicSchools/$_sid': _schoolMap(meta)});
+    if (meta.name.trim().isNotEmpty) {
+      await _refs.root.update({'publicSchools/$_sid': _schoolMap(meta)});
+    }
     var done = 0;
     final entries = records.entries.toList();
     const batch = 25;
@@ -277,8 +299,10 @@ class PublicLookupService {
 
   static const _readTimeout = Duration(seconds: 15);
 
-  /// Reads [path] from the server. Throws [LookupOfflineException] when it
-  /// can't be reached.
+  /// Reads [path] from the server (a one-time `get()`, never the phone's
+  /// copy, which is empty on a fresh install). Throws
+  /// [LookupOfflineException] when the server can't be reached and
+  /// [LookupNotSetUpException] when the rules refuse the read.
   static Future<DataSnapshot> _serverRead(String path) async {
     try {
       return await FirebaseDatabase.instance
@@ -288,11 +312,18 @@ class PublicLookupService {
     } on TimeoutException {
       throw const LookupOfflineException();
     } on FirebaseException catch (e) {
-      if (e.code.contains('disconnected') ||
-          e.code.contains('network') ||
-          e.code.contains('unavailable')) {
+      final text = '${e.code} ${e.message}'.toLowerCase();
+      if (text.contains('permission')) {
+        debugPrint('Lookup read of "$path" refused by the rules: $e');
+        throw const LookupNotSetUpException();
+      }
+      if (text.contains('disconnected') ||
+          text.contains('network') ||
+          text.contains('unavailable') ||
+          text.contains('offline')) {
         throw const LookupOfflineException();
       }
+      debugPrint('Lookup read of "$path" failed: $e');
       rethrow;
     }
   }

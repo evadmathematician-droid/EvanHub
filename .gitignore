@@ -63,3 +63,10 @@ app.*.map.json
 /ios/firebase_app_id_file.json
 /macos/Runner/GoogleService-Info.plist
 .firebase/
+
+# Maintenance tools: never commit service-account keys or installed packages
+tools/node_modules/
+tools/*.json
+!tools/package.json
+!tools/package-lock.json
+*-firebase-adminsdk-*.json
