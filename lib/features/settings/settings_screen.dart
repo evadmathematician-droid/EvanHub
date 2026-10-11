@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/phone.dart';
 import '../../models/school.dart';
 import '../../services/school_service.dart';
 import '../../state/auth_controller.dart';
@@ -26,13 +27,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _phone = TextEditingController();
   final _email = TextEditingController();
   final _head = TextEditingController();
+  final _adminName = TextEditingController();
+  final _adminPhone = TextEditingController();
+  final _adminWhatsApp = TextEditingController();
   bool _loaded = false;
   bool _busy = false;
   String? _message;
 
   @override
   void dispose() {
-    for (final c in [_name, _address, _phone, _email, _head]) {
+    for (final c in [
+      _name,
+      _address,
+      _phone,
+      _email,
+      _head,
+      _adminName,
+      _adminPhone,
+      _adminWhatsApp,
+    ]) {
       c.dispose();
     }
     super.dispose();
@@ -45,10 +58,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _phone.text = meta.phone;
     _email.text = meta.email;
     _head.text = meta.headName;
+    _adminName.text = meta.adminName;
+    _adminPhone.text = meta.adminPhone;
+    _adminWhatsApp.text = meta.adminWhatsApp;
     _loaded = true;
   }
 
   Future<void> _save(String schoolId, SchoolMeta current) async {
+    final phoneError = phoneProblem(_adminPhone.text) ??
+        phoneProblem(_adminWhatsApp.text);
+    if (phoneError != null) {
+      setState(() => _message = 'Administrator phone: $phoneError');
+      return;
+    }
     setState(() {
       _busy = true;
       _message = null;
@@ -62,6 +84,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           phone: _phone.text.trim(),
           email: _email.text.trim(),
           headName: _head.text.trim(),
+          adminName: _adminName.text.trim(),
+          adminPhone: _adminPhone.text.trim(),
+          adminWhatsApp: _adminWhatsApp.text.trim(),
         ),
       );
       setState(() => _message = 'Saved.');
@@ -130,6 +155,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       'records.',
                 ),
               ),
+              const SizedBox(height: 20),
+              Text('Administrator contact',
+                  style: Theme.of(context).textTheme.titleSmall),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _adminName,
+                enabled: canEdit,
+                textCapitalization: TextCapitalization.words,
+                decoration:
+                    const InputDecoration(labelText: 'Administrator name'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _adminPhone,
+                enabled: canEdit,
+                keyboardType: TextInputType.phone,
+                decoration: const InputDecoration(
+                  labelText: 'Administrator phone number',
+                  hintText: 'e.g. 079 150 079',
+                  helperText: 'Parents and pupils may be shown this number if '
+                      'they need to contact your school.',
+                  helperMaxLines: 2,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _adminWhatsApp,
+                enabled: canEdit,
+                keyboardType: TextInputType.phone,
+                decoration: const InputDecoration(
+                    labelText: 'WhatsApp number (if different)'),
+              ),
               if (_message != null) ...[
                 const SizedBox(height: 12),
                 Text(_message!,
@@ -147,7 +204,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const Divider(height: 40),
                 SchoolImagesSection(school: school),
                 const Divider(height: 40),
-                const PublishLookupSection(),
+                PublishLookupSection(meta: school.meta),
               ],
               const Divider(height: 40),
               Text('Account', style: Theme.of(context).textTheme.titleMedium),
