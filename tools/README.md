@@ -1,19 +1,32 @@
 # Tools
 
-## List every school on the Look Up screen (`backfill_public_schools.js`)
+## Rebuild the public Look Up index (`rebuild_public_index.js`)
 
-The app's **Look Up a Record** screen lists the schools saved under
-`publicSchools` in the database. Schools registered before Look Up existed
-are only added when one of their admins signs in. This script adds **all**
-schools at once. It writes each school's name, town (address), badge,
-whether Lookup is approved, and the administrator's name and phone. It never
-copies pupils, teachers or anything private.
+The app's **Look Up a Record** screen (on the login screen, no sign-in
+needed) reads two public parts of the database:
 
-Schools registered before the Lookup choice existed are treated as
-**approved**: the script saves "Lookup ON" on their profile. Their admins can
-switch it off any time in **Settings → Public Look Up**.
+- `publicSchools` — the list of schools in the **Select your school** box
+  (name, town/location, badge, whether Lookup is approved, and the
+  administrator's name and phone);
+- `publicLookup` — one record per pupil (by admission number) and per
+  teacher (by NIN), readable only by someone who knows the exact ID.
 
-You only need to do this once. Running it again is safe.
+The app keeps both up to date as schools save their data, and rebuilds a
+school's index once when one of its admins signs in. This script rebuilds
+the index for **all** schools at once, including schools whose admins have
+not opened the new app version yet. It never copies passwords, PINs,
+guardian phone numbers or dates of birth.
+
+It also:
+
+- removes public records of pupils/teachers that no longer exist;
+- removes all records of a school that switched Lookup **OFF** (the school
+  stays in the list, with the "contact the school" message);
+- treats schools registered before the Lookup choice existed as
+  **approved** and saves "Lookup ON" on their profile (admins can switch it
+  off any time in **Settings → Public Look Up**).
+
+Running it again is safe.
 
 ### 1. Get a service-account key (one time)
 
@@ -38,23 +51,32 @@ You need Node.js (already installed on this PC). Open PowerShell and run:
 ```powershell
 cd E:\APACHE\Evangelist_Global\tools
 npm install
-node backfill_public_schools.js .\service-account.json --dry-run
+node rebuild_public_index.js .\service-account.json --dry-run
 ```
 
-The dry run only prints the schools it found. Nothing is written. If the
-list looks right, run it for real:
+The dry run only prints each school and how many records it would write.
+Nothing is written. If it looks right, run it for real:
 
 ```powershell
-node backfill_public_schools.js .\service-account.json
+node rebuild_public_index.js .\service-account.json
 ```
 
-It ends with `Done: N school(s) listed in publicSchools.`
+It ends with `Done: N school(s) listed, … record(s) written, …`.
+
+To rebuild just one school, add `--school <schoolId>` (the id is the key
+under `schools` in the Firebase console).
 
 ### 3. Check
 
 Open the app without signing in and tap **Look Up a Record**. Every school
-should now be in the **Select your school** list. You can also see them in
-the Firebase console under **Realtime Database → publicSchools**.
+should be in the **Select your school** list, and a pupil's admission
+number should open their record. You can also see the data in the Firebase
+console under **Realtime Database → publicSchools / publicLookup**.
+
+### Without the script
+
+An admin can rebuild their own school from the app: **Settings → Public
+Look Up → Publish Lookup Data**.
 
 ### If it fails
 

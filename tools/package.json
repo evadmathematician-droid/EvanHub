@@ -3,7 +3,7 @@
   "private": true,
   "description": "One-time maintenance scripts for the Evangelist Global database.",
   "scripts": {
-    "backfill-schools": "node backfill_public_schools.js"
+    "rebuild-index": "node rebuild_public_index.js"
   },
   "dependencies": {
     "firebase-admin": "^13.0.0"
