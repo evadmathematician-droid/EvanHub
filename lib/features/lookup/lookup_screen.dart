@@ -7,6 +7,7 @@ import '../../models/lookup_record.dart';
 import '../../services/public_lookup_service.dart';
 import '../../services/school_directory.dart';
 import '../../theme/app_colors.dart';
+import 'lookup_not_approved_dialog.dart';
 import 'lookup_result_dialog.dart';
 
 /// "Look Up a Record" — no account or sign-in needed. Choose the school,
@@ -67,6 +68,12 @@ class _LookupScreenState extends State<LookupScreen> {
     final id = _id.text.trim();
     if (school == null) {
       setState(() => _message = 'Select your school first.');
+      return;
+    }
+    // Not approved: never read a record; ask people to contact the school.
+    if (!school.lookupEnabled) {
+      setState(() => _message = null);
+      await showLookupNotApproved(context, school);
       return;
     }
     if (id.isEmpty) {
