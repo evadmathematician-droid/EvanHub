@@ -328,6 +328,8 @@
             "stream": { ".validate": "newData.isString() && (newData.val() === '' || newData.val() === 'Science' || newData.val() === 'Commercial' || newData.val() === 'Arts')" },
             "employmentType": { ".validate": "newData.isString() && (newData.val() === 'full_time' || newData.val() === 'part_time' || newData.val() === 'contract')" },
             "status": { ".validate": "newData.isString() && (newData.val() === 'active' || newData.val() === 'inactive')" },
+            // Principal / Vice Principal / Senior Teacher / Teacher, or '' when not set.
+            "rank": { ".validate": "newData.isString() && newData.val().length <= 40" },
             "photoUrl": { ".validate": "newData.isString() && newData.val().length <= 500 && (newData.val() === '' || newData.val().beginsWith('https://'))" },
             // JOIN: a teacher joining with an invite that names this record
             // links it to their login (admins can change it via the record).

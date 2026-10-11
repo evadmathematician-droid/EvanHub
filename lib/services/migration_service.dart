@@ -208,6 +208,7 @@ List<String> teacherProblems(Teacher t) => [
         'employment type "${t.employmentType}" is invalid',
       if (!['active', 'inactive'].contains(t.status))
         'status "${t.status}" is invalid',
+      if (t.rank.length > 40) 'rank is longer than 40 characters',
       if (!_url(t.photoUrl)) 'photo link is not an https:// link',
       if ((t.linkedUid ?? '').length > 128) 'linked login id is too long',
       if (t.nin.isNotEmpty && !RegExp(r'^[A-HJ-NP-Z0-9]{8}$').hasMatch(t.nin))

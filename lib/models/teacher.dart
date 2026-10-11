@@ -32,6 +32,54 @@ class TeacherDocument {
       };
 }
 
+/// Teacher ranks, highest first (the same list as the Bubuya school app).
+/// Rank order drives the "Rank" sort. A teacher with no rank is shown as
+/// [unassigned]; that word is never saved.
+class TeacherRank {
+  const TeacherRank._();
+
+  static const options = [
+    'Principal',
+    'Vice Principal',
+    'Senior Teacher',
+    'Teacher',
+  ];
+
+  static const unassigned = 'Unassigned';
+
+  /// 0 for Principal … 3 for Teacher; any other rank after those, and no
+  /// rank last.
+  static int order(String rank) {
+    final r = rank.trim().toLowerCase();
+    if (r.isEmpty) return options.length + 1;
+    final i = options.indexWhere((o) => o.toLowerCase() == r);
+    return i >= 0 ? i : options.length;
+  }
+
+  /// What lists show for [rank].
+  static String label(String rank) =>
+      rank.trim().isEmpty ? unassigned : rank.trim();
+}
+
+/// Whether a teacher still works at the school. Stored as `active` /
+/// `inactive` (the values the database rules accept) and shown as
+/// Active / Past. A record with no status counts as active.
+class TeacherStatus {
+  const TeacherStatus._();
+
+  static const active = 'active';
+  static const past = 'inactive';
+
+  /// The stored value for [raw]: anything but a "past" word is active.
+  static String normalize(Object? raw) {
+    final s = (raw ?? '').toString().trim().toLowerCase();
+    return (s == past || s == 'past') ? past : active;
+  }
+
+  static String label(String status) =>
+      normalize(status) == past ? 'Past' : 'Active';
+}
+
 /// A teacher. Stored in two halves with the same id (see
 /// `database.rules.json`):
 ///  - `schools/{schoolId}/teachers/{id}` — public fields ([toPublicMap]),
@@ -56,7 +104,13 @@ class Teacher {
   final String phone;
   final List<String> subjects;
   final String employmentType; // full_time | part_time | contract
-  final String status; // active | inactive
+
+  /// See [TeacherStatus]: `active`, or `inactive` (shown as Past).
+  final String status;
+
+  /// One of [TeacherRank.options], or empty when not set (shown as
+  /// "Unassigned").
+  final String rank;
   final String? linkedUid;
   final DateTime? createdAt;
 
@@ -88,7 +142,8 @@ class Teacher {
     this.phone = '',
     this.subjects = const [],
     this.employmentType = 'full_time',
-    this.status = 'active',
+    this.status = TeacherStatus.active,
+    this.rank = '',
     this.linkedUid,
     this.createdAt,
     this.nin = '',
@@ -110,6 +165,14 @@ class Teacher {
       .where((p) => p.trim().isNotEmpty)
       .join(' ');
 
+  bool get isActive => TeacherStatus.normalize(status) == TeacherStatus.active;
+
+  /// "Active" or "Past".
+  String get statusLabel => TeacherStatus.label(status);
+
+  /// The rank, or "Unassigned".
+  String get rankLabel => TeacherRank.label(rank);
+
   /// Builds a teacher from its public and private halves. Passing the same
   /// map twice reads a pre-Phase-1 record that held every field in one place.
   factory Teacher.fromParts(
@@ -130,7 +193,8 @@ class Teacher {
       level: s('level'),
       stream: s('stream'),
       employmentType: (public['employmentType'] ?? 'full_time') as String,
-      status: (public['status'] ?? 'active') as String,
+      status: TeacherStatus.normalize(public['status']),
+      rank: s('rank'),
       photoUrl: s('photoUrl'),
       linkedUid: public['linkedUid'] as String?,
       createdAt: fromMillis(public['createdAt']),
@@ -169,7 +233,8 @@ class Teacher {
         'level': level,
         'stream': stream,
         'employmentType': employmentType,
-        'status': status,
+        'status': TeacherStatus.normalize(status),
+        'rank': rank.trim(),
         'photoUrl': photoUrl,
         'linkedUid': linkedUid,
         'createdAt': createdAt == null
@@ -201,6 +266,7 @@ class Teacher {
     List<String>? subjects,
     String? employmentType,
     String? status,
+    String? rank,
     String? linkedUid,
     String? nin,
     String? gender,
@@ -226,6 +292,7 @@ class Teacher {
         subjects: subjects ?? this.subjects,
         employmentType: employmentType ?? this.employmentType,
         status: status ?? this.status,
+        rank: rank ?? this.rank,
         linkedUid: linkedUid ?? this.linkedUid,
         createdAt: createdAt,
         nin: nin ?? this.nin,

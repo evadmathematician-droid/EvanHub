@@ -53,6 +53,8 @@ class _TeacherFormScreenState extends State<TeacherFormScreen> {
   String _level = '';
   String _stream = '';
   String _employmentType = 'full_time';
+  String _rank = '';
+  String _status = TeacherStatus.active;
   String _photoUrl = '';
 
   /// A photo picked with no internet: shown here, queued on Save, and
@@ -79,6 +81,10 @@ class _TeacherFormScreenState extends State<TeacherFormScreen> {
   bool get _privateLoaded => !_isEdit || _loaded != null;
   bool get _teachesSenior => _level == 'SSS' || _level == 'BOTH';
 
+  /// A saved rank outside [TeacherRank.options] (kept so editing never
+  /// drops it), or null.
+  String? get _rankOrNull => _rank.isEmpty ? null : _rank;
+
   @override
   void initState() {
     super.initState();
@@ -102,6 +108,8 @@ class _TeacherFormScreenState extends State<TeacherFormScreen> {
     _level = t?.level ?? '';
     _stream = t?.stream ?? '';
     _employmentType = t?.employmentType ?? 'full_time';
+    _rank = t?.rank.trim() ?? '';
+    _status = TeacherStatus.normalize(t?.status);
     _photoUrl = t?.photoUrl ?? '';
     _documents = [...?t?.documents];
     if (t != null) _loadPrivate(t);
@@ -341,6 +349,8 @@ class _TeacherFormScreenState extends State<TeacherFormScreen> {
         // Stream only applies to senior secondary teaching.
         stream: _teachesSenior ? _stream : '',
         employmentType: _employmentType,
+        rank: _rank,
+        status: _status,
         photoUrl: _photoUrl,
         documents: _documents,
         subjects: _subjects.text
@@ -608,6 +618,26 @@ class _TeacherFormScreenState extends State<TeacherFormScreen> {
               ],
               onChanged: (v) =>
                   setState(() => _employmentType = v ?? 'full_time'),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              initialValue: _rank,
+              decoration: const InputDecoration(labelText: 'Rank'),
+              items: [
+                const DropdownMenuItem(
+                    value: '', child: Text('Not set (Unassigned)')),
+                for (final r in {...TeacherRank.options, ?_rankOrNull})
+                  DropdownMenuItem(value: r, child: Text(r)),
+              ],
+              onChanged: (v) => setState(() => _rank = v ?? ''),
+            ),
+            const SizedBox(height: 16),
+            _choice(
+              'Status',
+              const ['Active', 'Past'],
+              TeacherStatus.label(_status),
+              (v) => setState(() => _status =
+                  v == 'Past' ? TeacherStatus.past : TeacherStatus.active),
             ),
             const SizedBox(height: 16),
             _choice('Level *', const ['JSS', 'SSS', 'BOTH'], _level, (v) {

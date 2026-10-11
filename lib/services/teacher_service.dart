@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../core/offline_write.dart';
 import '../core/rtdb.dart';
 import '../core/tenant/tenant_refs.dart';
@@ -15,6 +17,50 @@ class TeacherService {
     return watchList(_refs.teachers, Teacher.fromMap).map(
       (list) => list..sort((a, b) => compareText(a.lastName, b.lastName)),
     );
+  }
+
+  /// Like [watchAll], with each teacher's NIN filled in from
+  /// `teacherPrivate` so the list can search and sort by it. Admins only
+  /// (the private half is admin-only); both lists are kept synced on the
+  /// phone, so this works offline. Emits once both have loaded.
+  Stream<List<Teacher>> watchAllWithNin() {
+    List<Teacher>? teachers;
+    Map<String, dynamic>? private;
+    final subs = <StreamSubscription<Object?>>[];
+    late final StreamController<List<Teacher>> controller;
+
+    void emit() {
+      final t = teachers, p = private;
+      if (t == null || p == null) return;
+      controller.add([
+        for (final teacher in t)
+          teacher.copyWith(nin: (asMap(p[teacher.id])['nin'] ?? '') as String),
+      ]);
+    }
+
+    controller = StreamController<List<Teacher>>(
+      onListen: () {
+        subs
+          ..add(watchAll().listen((list) {
+            teachers = list;
+            emit();
+          }, onError: controller.addError))
+          ..add(_refs.teacherPrivate.onValue.listen((e) {
+            private = asMap(e.snapshot.value);
+            emit();
+          }, onError: (Object e) {
+            // No NINs (e.g. rules refused): still show the list.
+            private = const {};
+            emit();
+          }));
+      },
+      onCancel: () async {
+        for (final s in subs) {
+          await s.cancel();
+        }
+      },
+    );
+    return controller.stream;
   }
 
   /// [teacher] with its `teacherPrivate` half loaded (admins only).
