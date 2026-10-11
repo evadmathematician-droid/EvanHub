@@ -9,7 +9,8 @@ import 'public_lookup_service.dart';
 
 /// Why the school list could not be shown.
 enum SchoolListProblem {
-  offline('Lookup needs internet. Check your connection and try again.'),
+  offline('You are offline and the school list has not been downloaded on '
+      'this phone yet. Connect to the internet once, then try again.'),
   notSetUp('Lookup is not set up yet on the server. Please contact the '
       'app administrator.'),
   empty('No schools are registered yet.'),

@@ -25,7 +25,7 @@ class LookupScreen extends StatefulWidget {
 
 class _LookupScreenState extends State<LookupScreen> {
   static const _offline =
-      'Lookup needs internet. Check your connection and try again.';
+      'You are offline. Looking up a record needs internet. Connect and try again.';
 
   final _directory = SchoolDirectory.instance;
   final _id = TextEditingController();
@@ -94,7 +94,7 @@ class _LookupScreenState extends State<LookupScreen> {
       if (!mounted) return;
       if (record == null) {
         setState(() => _message = 'No record found for this ID in '
-            '${school.name}. Check the ID and try again.');
+            '${school.name}. Check the ID or contact the school.');
         return;
       }
       await showLookupResult(context,
