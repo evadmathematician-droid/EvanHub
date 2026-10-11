@@ -11,9 +11,8 @@ import 'public_lookup_service.dart';
 enum SchoolListProblem {
   offline('Lookup needs internet. Check your connection and try again.'),
   notSetUp('Lookup is not set up yet on the server. Please contact the '
-      'school administrator.'),
-  empty('No schools have been published for lookup yet. A school '
-      'administrator should open the app and sign in once.'),
+      'app administrator.'),
+  empty('No schools are registered yet.'),
   failed('Could not load the list of schools. Try again.');
 
   const SchoolListProblem(this.message);
@@ -29,7 +28,7 @@ class SchoolDirectory extends ChangeNotifier {
 
   static final instance = SchoolDirectory._();
 
-  static const _cacheKey = 'lookup_public_schools_v1';
+  static const _cacheKey = 'lookup_public_schools_v2';
 
   List<PublicSchool>? _schools;
   bool _loading = false;
@@ -91,12 +90,7 @@ class SchoolDirectory extends ChangeNotifier {
       if (raw == null) return;
       _schools = [
         for (final m in (jsonDecode(raw) as List).cast<Map<String, dynamic>>())
-          PublicSchool(
-            id: '${m['id']}',
-            name: '${m['name']}',
-            logoUrl: '${m['logoUrl'] ?? ''}',
-            town: '${m['town'] ?? ''}',
-          ),
+          PublicSchool.fromMap('${m['id']}', m),
       ];
     } catch (e) {
       debugPrint('Saved school list unreadable: $e');
@@ -108,8 +102,7 @@ class SchoolDirectory extends ChangeNotifier {
       await (await SharedPreferences.getInstance()).setString(
         _cacheKey,
         jsonEncode([
-          for (final s in schools)
-            {'id': s.id, 'name': s.name, 'logoUrl': s.logoUrl, 'town': s.town},
+          for (final s in schools) {'id': s.id, ...s.toMap()},
         ]),
       );
     } catch (e) {

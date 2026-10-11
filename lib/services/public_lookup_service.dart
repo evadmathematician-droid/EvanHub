@@ -16,13 +16,56 @@ import '../models/teacher.dart';
 
 /// A school in the public list on the Look Up screen.
 class PublicSchool {
-  const PublicSchool(
-      {required this.id, required this.name, this.logoUrl = '', this.town = ''});
+  const PublicSchool({
+    required this.id,
+    required this.name,
+    this.logoUrl = '',
+    this.town = '',
+    this.lookupEnabled = true,
+    this.adminName = '',
+    this.adminPhone = '',
+    this.adminWhatsApp = '',
+  });
 
   final String id;
   final String name;
   final String logoUrl;
   final String town;
+
+  /// False when the school has not approved Look Up: no record is read and
+  /// people are asked to contact the school instead.
+  final bool lookupEnabled;
+  final String adminName;
+
+  /// International form (+232…), or '' when none was given.
+  final String adminPhone;
+  final String adminWhatsApp;
+
+  /// The number for WhatsApp: its own, else the admin phone.
+  String get whatsAppNumber => adminWhatsApp.isNotEmpty ? adminWhatsApp : adminPhone;
+
+  factory PublicSchool.fromMap(String id, Map<String, dynamic> m) =>
+      PublicSchool(
+        id: id,
+        name: (m['name'] ?? '').toString(),
+        logoUrl: (m['logoUrl'] ?? '').toString(),
+        town: (m['town'] ?? '').toString(),
+        // Missing = approved (schools listed before the choice existed).
+        lookupEnabled: m['lookupEnabled'] != false,
+        adminName: (m['adminName'] ?? '').toString(),
+        adminPhone: (m['adminPhone'] ?? '').toString(),
+        adminWhatsApp: (m['adminWhatsApp'] ?? '').toString(),
+      );
+
+  Map<String, dynamic> toMap() => {
+        'name': name,
+        'logoUrl': logoUrl,
+        'town': town,
+        'lookupEnabled': lookupEnabled,
+        'adminName': adminName,
+        'adminPhone': adminPhone,
+        'adminWhatsApp': adminWhatsApp,
+      };
 }
 
 /// Thrown by the public reads when the server can't be reached.
@@ -63,6 +106,19 @@ class PublicLookupService {
         (Object e) => debugPrint('Public lookup not updated: $e')));
   }
 
+  /// Whether the school approves Look Up (from the profile on this phone;
+  /// a school that never decided counts as approved). Record writes skip
+  /// silently when it doesn't — the rules refuse them too.
+  Future<bool> _lookupOn() async {
+    try {
+      final v = (await readOnce(_refs.profile.child('lookupEnabled'))).value;
+      return v != false;
+    } catch (e) {
+      debugPrint('Look Up approval unknown, not publishing: $e');
+      return false;
+    }
+  }
+
   /// Field-by-field updates for one record, so fields this phone doesn't
   /// send (history on a teacher's phone) are kept.
   Map<String, Object?> _fieldUpdates(String key, Map<String, Object?> fields) =>
@@ -80,7 +136,7 @@ class PublicLookupService {
       {String? previousAdmissionNo, bool withHistory = false}) async {
     try {
       final key = lookupKey(LookupType.student, student.admissionNo);
-      if (key.isEmpty) return;
+      if (key.isEmpty || !await _lookupOn()) return;
       final updates = _fieldUpdates(
         key,
         LookupRecord.studentFields(
@@ -105,7 +161,8 @@ class PublicLookupService {
 
   /// Publishes [teacher] after a save, keyed by NIN. A teacher with no NIN
   /// can't be looked up; an old NIN's record is removed.
-  void publishTeacher(Teacher teacher, {String? previousNin}) {
+  Future<void> publishTeacher(Teacher teacher, {String? previousNin}) async {
+    if (!await _lookupOn()) return;
     final key = lookupKey(LookupType.teacher, teacher.nin);
     final updates = key.isEmpty
         ? <String, Object?>{}
@@ -123,6 +180,7 @@ class PublicLookupService {
   /// A student's or teacher's new photo, after a queued upload finished.
   Future<void> publishPhoto(String collection, String recordId) async {
     try {
+      if (!await _lookupOn()) return;
       if (collection == 'students') {
         final snap = await readOnce(_refs.students.child(recordId));
         if (!snap.exists) return;
@@ -173,7 +231,14 @@ class PublicLookupService {
   /// is in use gets listed — including those registered before Look Up.
   Future<void> refreshSchoolListing() async {
     try {
-      final meta = SchoolMeta.fromMap(asMap((await readOnce(_refs.profile)).value));
+      final profile = asMap((await readOnce(_refs.profile)).value);
+      final meta = SchoolMeta.fromMap(profile);
+      if (meta.name.trim().isEmpty) return;
+      // Schools registered before Look Up had no choice to make: they count
+      // as approved, and this records it.
+      if (profile['lookupEnabled'] == null) {
+        _publish({'schools/$_sid/profile/lookupEnabled': true});
+      }
       publishSchool(meta);
     } catch (e) {
       debugPrint('School listing for Look Up not refreshed: $e');
@@ -184,8 +249,37 @@ class PublicLookupService {
         'name': meta.name.trim(),
         'logoUrl': meta.logoUrl ?? '',
         'town': meta.address.trim(),
+        'lookupEnabled': meta.lookupApproved,
+        'adminName': meta.adminName.trim(),
+        // International form (+232…) for Call / WhatsApp; null removes it.
+        'adminPhone': meta.adminPhoneIntl.isEmpty ? null : meta.adminPhoneIntl,
+        'adminWhatsApp':
+            meta.adminWhatsAppIntl.isEmpty ? null : meta.adminWhatsAppIntl,
         'updatedAt': ServerValue.timestamp,
       };
+
+  /// Settings switch: turns Look Up ON or OFF for the school (needs
+  /// internet; waits for the server).
+  ///  - ON records the decision, updates the school's listing and publishes
+  ///    every record ([publishAll]); returns how many.
+  ///  - OFF records the decision, keeps the school listed with
+  ///    lookupEnabled false and removes ALL its records; returns 0.
+  Future<int> setLookupEnabled(bool on,
+      {required String uid,
+      void Function(int done, int total)? onProgress}) async {
+    await _refs.profile.update({
+      'lookupEnabled': on,
+      'lookupConsentAt': ServerValue.timestamp,
+      'lookupConsentBy': uid,
+    });
+    if (on) return publishAll(onProgress: onProgress);
+    final meta = SchoolMeta.fromMap(asMap((await _refs.profile.get()).value));
+    await _refs.root.update({
+      if (meta.name.trim().isNotEmpty) 'publicSchools/$_sid': _schoolMap(meta),
+      'publicLookup/$_sid': null,
+    });
+    return 0;
+  }
 
   /// Admin "Publish Lookup Data": copies every student and teacher of the
   /// school into `publicLookup` (whole records, so stale fields go) and
@@ -202,6 +296,14 @@ class PublicLookupService {
       _refs.promotions.get(),
     ]);
     final meta = SchoolMeta.fromMap(asMap(results[0].value));
+    if (!meta.lookupApproved) {
+      // Not approved: keep the school listed, publish no records.
+      if (meta.name.trim().isNotEmpty) {
+        await _refs.root.update({'publicSchools/$_sid': _schoolMap(meta)});
+      }
+      onProgress?.call(0, 0);
+      return 0;
+    }
     final classNames = _classNames(results[1]);
     final studentPrivate = asMap(results[3].value);
     final teacherPrivate = asMap(results[5].value);
@@ -334,15 +436,7 @@ class PublicLookupService {
     return [
       for (final c in snap.children)
         if (c.key != null && c.value is Map)
-          () {
-            final m = asMap(c.value);
-            return PublicSchool(
-              id: c.key!,
-              name: (m['name'] ?? '').toString(),
-              logoUrl: (m['logoUrl'] ?? '').toString(),
-              town: (m['town'] ?? '').toString(),
-            );
-          }(),
+          PublicSchool.fromMap(c.key!, asMap(c.value)),
     ].where((s) => s.name.trim().isNotEmpty).toList()
       ..sort((a, b) => compareText(a.name, b.name));
   }

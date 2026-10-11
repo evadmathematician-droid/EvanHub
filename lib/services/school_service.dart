@@ -39,7 +39,14 @@ class SchoolService {
       'schools/$schoolId': {
         'ownerUid': ownerUid,
         'createdAt': now,
-        'profile': {...meta.toMap(), 'updatedAt': now},
+        'profile': {
+          ...meta.toMap(),
+          // The Look Up decision made on the registration form.
+          'lookupEnabled': meta.lookupApproved,
+          'lookupConsentAt': now,
+          'lookupConsentBy': ownerUid,
+          'updatedAt': now,
+        },
         'subscription': const Subscription().toMap(),
         'members': {
           ownerUid: {

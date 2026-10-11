@@ -95,7 +95,8 @@ class TeacherService {
     }
     await commitWrite(_refs.school.update(updates));
     // The public Look Up copy (keyed by NIN) follows, queued offline.
-    PublicLookupService(_refs).publishTeacher(teacher, previousNin: previousNin);
+    unawaited(PublicLookupService(_refs)
+        .publishTeacher(teacher, previousNin: previousNin));
     return id;
   }
 

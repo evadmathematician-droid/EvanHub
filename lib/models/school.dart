@@ -1,3 +1,4 @@
+import '../core/phone.dart';
 import '../core/rtdb.dart';
 
 /// School identity block — stored at `schools/{schoolId}/profile` (it lived at
@@ -21,6 +22,23 @@ class SchoolMeta {
   /// Head Teacher / Principal, printed under the signature line.
   final String headName;
 
+  /// Whether the school lets pupils, parents and teachers look up their own
+  /// records without signing in. Null = never decided (schools registered
+  /// before Look Up), which counts as approved; see [lookupApproved].
+  final bool? lookupEnabled;
+
+  /// When and by whom (uid) the Look Up decision was last made.
+  final DateTime? lookupConsentAt;
+  final String lookupConsentBy;
+
+  /// The school administrator, shown to people asking about a school that
+  /// has not approved Look Up. [adminPhone] is required for new schools;
+  /// [adminWhatsApp] only when it differs. Both are kept as typed; the
+  /// international forms for links come from [normalizePhone].
+  final String adminName;
+  final String adminPhone;
+  final String adminWhatsApp;
+
   const SchoolMeta({
     required this.name,
     this.logoUrl,
@@ -30,7 +48,20 @@ class SchoolMeta {
     this.email = '',
     this.stampUrl,
     this.headName = '',
+    this.lookupEnabled,
+    this.lookupConsentAt,
+    this.lookupConsentBy = '',
+    this.adminName = '',
+    this.adminPhone = '',
+    this.adminWhatsApp = '',
   });
+
+  /// Look Up is on unless the school switched it off.
+  bool get lookupApproved => lookupEnabled ?? true;
+
+  /// `+232…` for links, or '' when there is no usable number.
+  String get adminPhoneIntl => normalizePhone(adminPhone) ?? '';
+  String get adminWhatsAppIntl => normalizePhone(adminWhatsApp) ?? '';
 
   factory SchoolMeta.fromMap(Map<String, dynamic> map) => SchoolMeta(
         name: (map['name'] ?? '') as String,
@@ -41,6 +72,12 @@ class SchoolMeta {
         email: (map['email'] ?? '') as String,
         stampUrl: map['stampUrl'] as String?,
         headName: (map['headName'] ?? '') as String,
+        lookupEnabled: map['lookupEnabled'] as bool?,
+        lookupConsentAt: fromMillis(map['lookupConsentAt']),
+        lookupConsentBy: (map['lookupConsentBy'] ?? '') as String,
+        adminName: (map['adminName'] ?? '') as String,
+        adminPhone: (map['adminPhone'] ?? '') as String,
+        adminWhatsApp: (map['adminWhatsApp'] ?? '') as String,
       );
 
   Map<String, dynamic> toMap() => {
@@ -52,6 +89,14 @@ class SchoolMeta {
         'email': email,
         'stampUrl': stampUrl,
         'headName': headName,
+        'lookupEnabled': lookupEnabled,
+        'lookupConsentAt': toMillis(lookupConsentAt),
+        'lookupConsentBy': lookupConsentBy.isEmpty ? null : lookupConsentBy,
+        'adminName': adminName,
+        'adminPhone': adminPhone,
+        'adminPhoneIntl': adminPhoneIntl,
+        'adminWhatsApp': adminWhatsApp,
+        'adminWhatsAppIntl': adminWhatsAppIntl,
       };
 
   SchoolMeta copyWith({
@@ -63,6 +108,12 @@ class SchoolMeta {
     String? email,
     String? stampUrl,
     String? headName,
+    bool? lookupEnabled,
+    DateTime? lookupConsentAt,
+    String? lookupConsentBy,
+    String? adminName,
+    String? adminPhone,
+    String? adminWhatsApp,
   }) =>
       SchoolMeta(
         name: name ?? this.name,
@@ -73,6 +124,12 @@ class SchoolMeta {
         email: email ?? this.email,
         stampUrl: stampUrl ?? this.stampUrl,
         headName: headName ?? this.headName,
+        lookupEnabled: lookupEnabled ?? this.lookupEnabled,
+        lookupConsentAt: lookupConsentAt ?? this.lookupConsentAt,
+        lookupConsentBy: lookupConsentBy ?? this.lookupConsentBy,
+        adminName: adminName ?? this.adminName,
+        adminPhone: adminPhone ?? this.adminPhone,
+        adminWhatsApp: adminWhatsApp ?? this.adminWhatsApp,
       );
 }
 

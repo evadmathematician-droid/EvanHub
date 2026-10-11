@@ -91,6 +91,11 @@
         "name": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 120" },
         "logoUrl": { ".validate": "newData.isString() && newData.val().length <= 500 && (newData.val() === '' || newData.val().beginsWith('https://'))" },
         "town": { ".validate": "newData.isString() && newData.val().length <= 300" },
+        // Listed whether or not Look Up is approved; false = "contact us".
+        "lookupEnabled": { ".validate": "newData.isBoolean()" },
+        "adminName": { ".validate": "newData.isString() && newData.val().length <= 100" },
+        "adminPhone": { ".validate": "newData.isString() && newData.val().matches(/^\\+[0-9]{8,15}$/)" },
+        "adminWhatsApp": { ".validate": "newData.isString() && newData.val().matches(/^\\+[0-9]{8,15}$/)" },
         "updatedAt": { ".validate": "newData.isNumber() && newData.val() <= now" },
         "$other": { ".validate": false }
       }
@@ -106,10 +111,15 @@
     // passwords, PINs, guardian phone numbers or dates of birth.
     "publicLookup": {
       "$sid": {
+        // Switching Look Up OFF: an admin removes ALL the school's records at
+        // once. Only a delete matches here; this grants no read.
+        ".write": "auth != null && !newData.exists() && root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin'",
         "$key": {
           ".read": true,
           ".write": "auth != null && (root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin' || (root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'teacher' && $key.beginsWith('student_')))",
-          ".validate": "newData.hasChildren(['type', 'id', 'fullName']) && $key.beginsWith(newData.child('type').val() + '_') && $key.length <= 60",
+          // Records can only be written while the school approves Look Up
+          // (lookupEnabled missing counts as approved). Deletes always work.
+          ".validate": "newData.hasChildren(['type', 'id', 'fullName']) && $key.beginsWith(newData.child('type').val() + '_') && $key.length <= 60 && root.child('schools').child($sid).child('profile').child('lookupEnabled').val() !== false",
           "type": { ".validate": "newData.isString() && (newData.val() === 'student' || newData.val() === 'teacher')" },
           "id": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 40" },
           "firstName": { ".validate": "newData.isString() && newData.val().length <= 60" },
@@ -199,6 +209,16 @@
           "coverUrl": { ".validate": "newData.isString() && newData.val().length <= 500 && (newData.val() === '' || newData.val().beginsWith('https://'))" },
           "stampUrl": { ".validate": "newData.isString() && newData.val().length <= 500 && (newData.val() === '' || newData.val().beginsWith('https://'))" },
           "headName": { ".validate": "newData.isString() && newData.val().length <= 120" },
+          // Public Look Up consent (missing = approved, for older schools).
+          "lookupEnabled": { ".validate": "newData.isBoolean()" },
+          "lookupConsentAt": { ".validate": "newData.isNumber() && newData.val() <= now" },
+          "lookupConsentBy": { ".validate": "newData.isString() && (newData.val() === auth.uid || newData.val() === data.val())" },
+          // School administrator contact; phones as typed plus +232... for links.
+          "adminName": { ".validate": "newData.isString() && newData.val().length <= 100" },
+          "adminPhone": { ".validate": "newData.isString() && newData.val().length <= 30" },
+          "adminPhoneIntl": { ".validate": "newData.isString() && newData.val().matches(/^(\\+[0-9]{8,15})?$/)" },
+          "adminWhatsApp": { ".validate": "newData.isString() && newData.val().length <= 30" },
+          "adminWhatsAppIntl": { ".validate": "newData.isString() && newData.val().matches(/^(\\+[0-9]{8,15})?$/)" },
           "address": { ".validate": "newData.isString() && newData.val().length <= 300" },
           "phone": { ".validate": "newData.isString() && newData.val().length <= 40" },
           "email": { ".validate": "newData.isString() && newData.val().length <= 120" },
