@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../app/routes.dart';
 import '../../services/auth_service.dart';
+import '../../services/school_directory.dart';
 import '../../core/login_timer.dart';
 import '../../state/auth_controller.dart';
 import '../../theme/app_colors.dart';
@@ -21,6 +24,13 @@ class _LoginScreenState extends State<LoginScreen> {
   final _password = TextEditingController();
   bool _busy = false;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    // Ready by the time someone taps "Look Up a Record".
+    unawaited(SchoolDirectory.instance.load());
+  }
 
   @override
   void dispose() {

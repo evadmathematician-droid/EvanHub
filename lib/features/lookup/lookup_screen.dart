@@ -1,15 +1,20 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
+import '../../core/image_url.dart';
 import '../../core/internet_check.dart';
 import '../../models/lookup_record.dart';
 import '../../services/public_lookup_service.dart';
+import '../../services/school_directory.dart';
 import '../../theme/app_colors.dart';
 import 'lookup_result_dialog.dart';
 
 /// "Look Up a Record" — no account or sign-in needed. Choose the school,
 /// Student or Teacher, enter the ID (admission number / NIN) and the record
 /// opens as a pop-up. Reads only the public nodes (`publicSchools`, and one
-/// `publicLookup` record by exact key), so it needs the internet.
+/// `publicLookup` record by exact key), so the search needs the internet.
+/// The school list comes from [SchoolDirectory], which the login screen
+/// starts loading in advance.
 class LookupScreen extends StatefulWidget {
   const LookupScreen({super.key});
 
@@ -18,12 +23,11 @@ class LookupScreen extends StatefulWidget {
 }
 
 class _LookupScreenState extends State<LookupScreen> {
-  static const _offline = 'Lookup needs an internet connection.';
+  static const _offline =
+      'Lookup needs internet. Check your connection and try again.';
 
+  final _directory = SchoolDirectory.instance;
   final _id = TextEditingController();
-  List<PublicSchool>? _schools;
-  bool _loadingSchools = true;
-  String? _schoolsError;
   PublicSchool? _school;
   LookupType _type = LookupType.student;
   bool _busy = false;
@@ -32,7 +36,8 @@ class _LookupScreenState extends State<LookupScreen> {
   @override
   void initState() {
     super.initState();
-    _loadSchools();
+    // Uses the list the login screen preloaded; loads it if that never ran.
+    _directory.load();
   }
 
   @override
@@ -41,38 +46,12 @@ class _LookupScreenState extends State<LookupScreen> {
     super.dispose();
   }
 
-  Future<void> _loadSchools() async {
-    setState(() {
-      _loadingSchools = true;
-      _schoolsError = null;
-    });
-    String? error;
-    List<PublicSchool>? schools;
-    if (!await hasInternet()) {
-      error = _offline;
-    } else {
-      try {
-        schools = await PublicLookupService.loadSchools();
-        if (schools.isEmpty) error = 'No schools are listed yet.';
-      } on LookupOfflineException {
-        error = _offline;
-      } catch (e) {
-        error = 'Could not load the list of schools. Try again.';
-      }
-    }
-    if (!mounted) return;
-    setState(() {
-      _schools = schools;
-      _schoolsError = error;
-      _loadingSchools = false;
-    });
-  }
-
-  Future<void> _pickSchool() async {
-    final schools = _schools;
-    if (schools == null || schools.isEmpty) return;
-    final picked = await showDialog<PublicSchool>(
+  Future<void> _pickSchool(List<PublicSchool> schools) async {
+    final picked = await showModalBottomSheet<PublicSchool>(
       context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
       builder: (_) => _SchoolPicker(schools: schools),
     );
     if (picked != null) {
@@ -115,7 +94,10 @@ class _LookupScreenState extends State<LookupScreen> {
           record: record, schoolName: school.name);
     } on LookupOfflineException {
       if (mounted) setState(() => _message = _offline);
+    } on LookupNotSetUpException {
+      if (mounted) setState(() => _message = SchoolListProblem.notSetUp.message);
     } catch (e) {
+      debugPrint('Lookup search failed: $e');
       if (mounted) {
         setState(() => _message = 'Could not look up this ID. Try again.');
       }
@@ -148,7 +130,10 @@ class _LookupScreenState extends State<LookupScreen> {
                     style: TextStyle(color: AppColors.textSecondary),
                   ),
                   const SizedBox(height: 20),
-                  _schoolField(),
+                  ListenableBuilder(
+                    listenable: _directory,
+                    builder: (context, _) => _schoolField(),
+                  ),
                   const SizedBox(height: 16),
                   SegmentedButton<LookupType>(
                     segments: const [
@@ -209,57 +194,132 @@ class _LookupScreenState extends State<LookupScreen> {
     );
   }
 
+  /// The "Select your school" button, a spinner while the first list
+  /// loads, or the reason there is no list with a Try Again button.
   Widget _schoolField() {
-    if (_loadingSchools) {
-      return const InputDecorator(
-        decoration: InputDecoration(
-            labelText: 'Select School', prefixIcon: Icon(Icons.apartment)),
-        child: Row(
-          children: [
-            SizedBox(
-                height: 16,
-                width: 16,
-                child: CircularProgressIndicator(strokeWidth: 2)),
-            SizedBox(width: 10),
-            Text('Loading schools…'),
-          ],
-        ),
+    final schools = _directory.schools ?? const <PublicSchool>[];
+    final problem = _directory.problem;
+
+    if (schools.isEmpty && _directory.loading) {
+      return const _SchoolButton(
+        label: 'Loading schools…',
+        leading: SizedBox(
+            height: 20,
+            width: 20,
+            child: CircularProgressIndicator(strokeWidth: 2)),
       );
     }
-    if (_schoolsError != null) {
+    if (schools.isEmpty || problem != null) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(_schoolsError!,
+          Text((problem ?? SchoolListProblem.empty).message,
               textAlign: TextAlign.center,
               style: const TextStyle(color: AppColors.danger)),
           const SizedBox(height: 8),
           OutlinedButton.icon(
-            onPressed: _loadSchools,
-            icon: const Icon(Icons.refresh),
-            label: const Text('Try again'),
+            onPressed: _directory.loading
+                ? null
+                : () => _directory.load(force: true),
+            icon: _directory.loading
+                ? const SizedBox(
+                    height: 16,
+                    width: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.refresh),
+            label: const Text('Try Again'),
           ),
         ],
       );
     }
-    return InkWell(
-      onTap: _pickSchool,
-      borderRadius: BorderRadius.circular(8),
-      child: InputDecorator(
-        decoration: const InputDecoration(
-          labelText: 'Select School',
-          prefixIcon: Icon(Icons.apartment),
-          suffixIcon: Icon(Icons.arrow_drop_down),
-        ),
-        isEmpty: _school == null,
-        child: Text(_school?.name ?? '',
-            maxLines: 1, overflow: TextOverflow.ellipsis),
+    // A school picked before a reload is kept only if it is still listed.
+    final selected = _school == null
+        ? null
+        : schools.where((s) => s.id == _school!.id).firstOrNull;
+    return _SchoolButton(
+      label: selected?.name ?? 'Select your school',
+      selected: selected != null,
+      leading: selected == null
+          ? const Icon(Icons.apartment, color: AppColors.primary)
+          : _SchoolLogo(school: selected),
+      onTap: () => _pickSchool(schools),
+    );
+  }
+}
+
+/// Full-width button with a drop-down arrow.
+class _SchoolButton extends StatelessWidget {
+  const _SchoolButton({
+    required this.label,
+    required this.leading,
+    this.selected = false,
+    this.onTap,
+  });
+
+  final String label;
+  final Widget leading;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton(
+      onPressed: onTap,
+      style: OutlinedButton.styleFrom(
+        minimumSize: const Size.fromHeight(56),
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        alignment: Alignment.centerLeft,
+      ),
+      child: Row(
+        children: [
+          leading,
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(label,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                    color: selected
+                        ? AppColors.textPrimary
+                        : AppColors.textSecondary)),
+          ),
+          const Icon(Icons.arrow_drop_down, color: AppColors.primary),
+        ],
       ),
     );
   }
 }
 
-/// The school list with a search box.
+/// The school's badge in a small circle, or a school icon.
+class _SchoolLogo extends StatelessWidget {
+  const _SchoolLogo({required this.school});
+
+  final PublicSchool school;
+
+  @override
+  Widget build(BuildContext context) {
+    const icon = CircleAvatar(
+      radius: 16,
+      backgroundColor: Color(0x142E3192),
+      child: Icon(Icons.apartment, size: 18, color: AppColors.primary),
+    );
+    if (school.logoUrl.isEmpty) return icon;
+    return ClipOval(
+      child: CachedNetworkImage(
+        imageUrl: cloudinaryResized(school.logoUrl, width: 96),
+        width: 32,
+        height: 32,
+        fit: BoxFit.cover,
+        placeholder: (_, _) => icon,
+        errorWidget: (_, _, _) => icon,
+      ),
+    );
+  }
+}
+
+/// Every school A–Z with a search box, in a bottom sheet.
 class _SchoolPicker extends StatefulWidget {
   const _SchoolPicker({required this.schools});
 
@@ -282,43 +342,38 @@ class _SchoolPickerState extends State<_SchoolPicker> {
                 s.name.toLowerCase().contains(q) ||
                 s.town.toLowerCase().contains(q))
             .toList();
-    return Dialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 32),
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxWidth: 460,
-          maxHeight: MediaQuery.sizeOf(context).height * 0.8,
-        ),
+    return Padding(
+      padding:
+          EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: SizedBox(
+        height: MediaQuery.sizeOf(context).height * 0.75,
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
               child: TextField(
-                autofocus: true,
                 onChanged: (v) => setState(() => _query = v),
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   isDense: true,
-                  hintText: 'Search for your school',
-                  prefixIcon: Icon(Icons.search),
+                  hintText:
+                      'Search ${widget.schools.length} schools by name or town',
+                  prefixIcon: const Icon(Icons.search),
                 ),
               ),
             ),
-            Flexible(
+            Expanded(
               child: shown.isEmpty
-                  ? const Padding(
-                      padding: EdgeInsets.all(24),
+                  ? const Center(
                       child: Text('No school matches this search.',
                           style: TextStyle(color: AppColors.textSecondary)),
                     )
-                  : ListView.builder(
-                      shrinkWrap: true,
+                  : ListView.separated(
                       itemCount: shown.length,
+                      separatorBuilder: (_, _) => const Divider(height: 1),
                       itemBuilder: (context, i) {
                         final s = shown[i];
                         return ListTile(
-                          leading: const Icon(Icons.apartment,
-                              color: AppColors.primary),
+                          leading: _SchoolLogo(school: s),
                           title: Text(s.name),
                           subtitle: s.town.isEmpty
                               ? null
@@ -329,16 +384,6 @@ class _SchoolPickerState extends State<_SchoolPicker> {
                         );
                       },
                     ),
-            ),
-            Align(
-              alignment: Alignment.centerRight,
-              child: Padding(
-                padding: const EdgeInsets.all(8),
-                child: TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Cancel'),
-                ),
-              ),
             ),
           ],
         ),
