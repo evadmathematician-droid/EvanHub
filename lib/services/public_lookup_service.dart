@@ -259,8 +259,8 @@ class PublicLookupService {
     await _upgradeIndex(profile['publicIndexVersion']);
   }
 
-  /// The one-time backfill: runs [publishAll] when the school's index is
-  /// older than [publicIndexVersion], then records the version. Online
+  /// The one-time backfill: runs [publishAll] (which records the version)
+  /// when the school's index is older than [publicIndexVersion]. Online
   /// only (it reads the whole school from the server); offline or on a
   /// failure it tries again at the next sign-in. Safe to repeat.
   Future<void> _upgradeIndex(Object? savedVersion) async {
@@ -269,7 +269,6 @@ class PublicLookupService {
     try {
       if (!await hasInternet()) return;
       final count = await publishAll();
-      await _refs.profile.child('publicIndexVersion').set(publicIndexVersion);
       debugPrint('Public lookup index v$publicIndexVersion built for $_sid: '
           '$count record(s).');
     } catch (e) {
@@ -320,6 +319,7 @@ class PublicLookupService {
   /// school into `publicLookup` (whole records, so stale fields go) and
   /// refreshes `publicSchools`. Needs internet; waits for the server.
   /// [onProgress] gets (done, total). Returns how many records were written.
+  /// Records [publicIndexVersion] on the profile when done.
   Future<int> publishAll({void Function(int done, int total)? onProgress}) async {
     final results = await Future.wait([
       _refs.profile.get(),
@@ -336,6 +336,7 @@ class PublicLookupService {
       if (meta.name.trim().isNotEmpty) {
         await _refs.root.update({'publicSchools/$_sid': _schoolMap(meta)});
       }
+      await _markIndexBuilt();
       onProgress?.call(0, 0);
       return 0;
     }
@@ -350,7 +351,8 @@ class PublicLookupService {
       final s = Student.fromParts(
           c.key!, asMap(c.value), asMap(studentPrivate[c.key]));
       final key = lookupKey(LookupType.student, s.admissionNo);
-      if (key.isEmpty) continue;
+      // No ID or no name: can't be looked up (the rules need both).
+      if (key.isEmpty || s.fullName.trim().isEmpty) continue;
       records[key] = LookupRecord.clean(LookupRecord.studentFields(
         s,
         className: classNames[s.classId] ?? '',
@@ -362,7 +364,8 @@ class PublicLookupService {
       final t = Teacher.fromParts(
           c.key!, asMap(c.value), asMap(teacherPrivate[c.key]));
       final key = lookupKey(LookupType.teacher, t.nin);
-      if (key.isEmpty) continue;
+      // No ID or no name: can't be looked up (the rules need both).
+      if (key.isEmpty || t.fullName.trim().isEmpty) continue;
       records[key] = LookupRecord.clean(LookupRecord.teacherFields(t));
     }
 
@@ -382,8 +385,14 @@ class PublicLookupService {
       done += chunk.length;
       onProgress?.call(done, total);
     }
+    await _markIndexBuilt();
     return done;
   }
+
+  /// Records on the profile that the index is built at [publicIndexVersion],
+  /// so the one-time rebuild at sign-in ([refreshSchoolListing]) is skipped.
+  Future<void> _markIndexBuilt() =>
+      _refs.profile.child('publicIndexVersion').set(publicIndexVersion);
 
   // ------------------------------------------------------- school helpers
 
