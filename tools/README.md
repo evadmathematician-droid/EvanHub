@@ -5,8 +5,13 @@
 The app's **Look Up a Record** screen lists the schools saved under
 `publicSchools` in the database. Schools registered before Look Up existed
 are only added when one of their admins signs in. This script adds **all**
-schools at once. It only writes each school's name, town (address) and
-badge. It never copies pupils, teachers or anything private.
+schools at once. It writes each school's name, town (address), badge,
+whether Lookup is approved, and the administrator's name and phone. It never
+copies pupils, teachers or anything private.
+
+Schools registered before the Lookup choice existed are treated as
+**approved**: the script saves "Lookup ON" on their profile. Their admins can
+switch it off any time in **Settings → Public Look Up**.
 
 You only need to do this once. Running it again is safe.
 
