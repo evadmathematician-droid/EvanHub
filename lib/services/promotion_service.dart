@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../core/offline_write.dart';
 import '../core/rtdb.dart';
 import '../core/tenant/tenant_refs.dart';
@@ -5,6 +7,7 @@ import '../models/promotion_record.dart';
 import '../models/school_class.dart';
 import '../models/student.dart';
 import 'promotion_planner.dart';
+import 'public_lookup_service.dart';
 
 export 'promotion_planner.dart'
     show BeceRecord, PromotionLine, PromotionOutcome, PromotionReport,
@@ -90,6 +93,9 @@ class PromotionService {
     );
     if (plan.updates.isNotEmpty) {
       await commitWrite(_refs.school.update(plan.updates));
+      // New class, status and history on the public Look Up copies.
+      unawaited(PublicLookupService(_refs).republishStudents(
+          [...request.promoteIds, ...request.repeatIds]));
     }
     return plan.report;
   }

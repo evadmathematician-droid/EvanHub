@@ -11,6 +11,9 @@ class Routes {
   static const parentPortal = '/parent';
   static const join = '/join';
 
+  /// Public record look-up; works signed in or out.
+  static const lookup = '/lookup';
+
   static const dashboard = '/dashboard';
 
   static const students = '/students';

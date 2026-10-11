@@ -7,6 +7,7 @@ import '../../state/auth_controller.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/status_views.dart';
 import '../../widgets/sign_out_dialog.dart';
+import 'publish_lookup_section.dart';
 import 'school_images_section.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -145,6 +146,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               if (canEdit) ...[
                 const Divider(height: 40),
                 SchoolImagesSection(school: school),
+                const Divider(height: 40),
+                const PublishLookupSection(),
               ],
               const Divider(height: 40),
               Text('Account', style: Theme.of(context).textTheme.titleMedium),

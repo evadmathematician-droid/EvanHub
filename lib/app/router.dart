@@ -16,6 +16,7 @@ import '../features/classes/promotion_screen.dart';
 import '../features/dashboard/dashboard_screen.dart';
 import '../features/documents/documents_screen.dart';
 import '../features/join/join_screen.dart';
+import '../features/lookup/lookup_screen.dart';
 import '../features/more/more_screen.dart';
 import '../features/onboarding/school_onboarding_screen.dart';
 import '../features/settings/settings_screen.dart';
@@ -57,6 +58,9 @@ GoRouter buildRouter(AuthController auth) {
       // a school, removed from a school, or already signed in elsewhere (it
       // explains that case itself). It opens the app when the join is done.
       if (loc == Routes.join) return null;
+
+      // Look Up needs no account, so it opens in every state too.
+      if (loc == Routes.lookup) return null;
 
       switch (auth.status) {
         case AuthStatus.unknown:
@@ -100,6 +104,10 @@ GoRouter buildRouter(AuthController auth) {
       GoRoute(
         path: Routes.join,
         builder: (_, _) => const JoinScreen(),
+      ),
+      GoRoute(
+        path: Routes.lookup,
+        builder: (_, _) => const LookupScreen(),
       ),
       GoRoute(
         path: Routes.noAccess,

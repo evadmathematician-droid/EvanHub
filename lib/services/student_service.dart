@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import '../core/offline_write.dart';
 import '../core/rtdb.dart';
 import '../core/tenant/tenant_refs.dart';
 import '../models/student.dart';
+import 'public_lookup_service.dart';
 
 class StudentService {
   StudentService(this._refs);
@@ -70,16 +73,21 @@ class StudentService {
       if (oldKey != newKey) updates['index/admissionNo/$oldKey'] = null;
     }
     await commitWrite(_refs.school.update(updates));
+    // The public Look Up copy follows in the background (queued offline).
+    unawaited(PublicLookupService(_refs)
+        .publishStudent(student, previousAdmissionNo: previousAdmissionNo));
     return id;
   }
 
-  /// Removes the public record, private record and index entry together.
-  Future<void> delete(Student student) {
-    return commitWrite(_refs.school.update({
+  /// Removes the public record, private record and index entry together,
+  /// and the public Look Up copy.
+  Future<void> delete(Student student) async {
+    await commitWrite(_refs.school.update({
       'students/${student.id}': null,
       'studentPrivate/${student.id}': null,
       if (student.admissionNo.isNotEmpty)
         'index/admissionNo/${indexKey(student.admissionNo)}': null,
     }));
+    PublicLookupService(_refs).removeStudent(student);
   }
 }

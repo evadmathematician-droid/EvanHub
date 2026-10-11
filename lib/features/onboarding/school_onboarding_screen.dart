@@ -122,6 +122,13 @@ class _SchoolOnboardingScreenState extends State<SchoolOnboardingScreen> {
             icon: const Icon(Icons.vpn_key_outlined),
             label: const Text('Invite code'),
           ),
+          // Only checking a record needs no account at all.
+          IconButton(
+            tooltip: 'Look Up a Record (no login needed)',
+            onPressed: _busy ? null : () => context.push(Routes.lookup),
+            color: Colors.white,
+            icon: const Icon(Icons.manage_search),
+          ),
         ],
       ),
       body: Stepper(
@@ -233,6 +240,19 @@ class _SchoolOnboardingScreenState extends State<SchoolOnboardingScreen> {
                           validator: (v) => (v == null || v.length < 6)
                               ? 'At least 6 characters'
                               : null,
+                        ),
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: TextButton.icon(
+                            onPressed: _busy
+                                ? null
+                                : () => context.push(Routes.lookup),
+                            icon: const Icon(Icons.manage_search),
+                            label: const Text(
+                                'Only want to check a record? Look Up a '
+                                'Record (no login needed)'),
+                          ),
                         ),
                       ],
                     ),

@@ -9,6 +9,7 @@ import '../core/offline_write.dart';
 import '../core/tenant/tenant_refs.dart';
 import '../state/auth_controller.dart';
 import 'cloudinary_service.dart';
+import 'public_lookup_service.dart';
 import 'upload_queue.dart';
 
 /// Uploads photos queued offline ([UploadQueue]) and writes each one's URL
@@ -124,6 +125,10 @@ class UploadSyncService with WidgetsBindingObserver {
         .timeout(_uploadTimeout);
     await commitWrite(record.child(item.field).set(upload.url));
     await _queue.remove(item);
+    if (item.recordId.isNotEmpty) {
+      unawaited(PublicLookupService(refs)
+          .publishPhoto(item.collection, item.recordId));
+    }
     return true;
   }
 }

@@ -80,6 +80,99 @@
       }
     },
 
+    // ---- PUBLIC LOOK UP (no sign-in) -------------------------------------
+    // The school list on the Look Up screen: name, badge and town only.
+    // Anyone may read the list; only that school's admins write their entry.
+    "publicSchools": {
+      ".read": true,
+      "$sid": {
+        ".write": "auth != null && root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin'",
+        ".validate": "newData.hasChildren(['name'])",
+        "name": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 120" },
+        "logoUrl": { ".validate": "newData.isString() && newData.val().length <= 500 && (newData.val() === '' || newData.val().beginsWith('https://'))" },
+        "town": { ".validate": "newData.isString() && newData.val().length <= 300" },
+        "updatedAt": { ".validate": "newData.isNumber() && newData.val() <= now" },
+        "$other": { ".validate": false }
+      }
+    },
+
+    // One pupil's or teacher's own record, found by school + exact ID.
+    // Key = "student_" / "teacher_" + the admission number / NIN, trimmed,
+    // upper-cased, with . $ # [ ] / turned into _ (the app's lookupKey()).
+    // Readable ONLY one record at a time: there is deliberately NO .read on
+    // publicLookup or publicLookup/$sid, so records can't be listed or
+    // downloaded in bulk. Admins write any record of their school; teachers
+    // only pupils' records (they save pupils, not teachers). Never holds
+    // passwords, PINs, guardian phone numbers or dates of birth.
+    "publicLookup": {
+      "$sid": {
+        "$key": {
+          ".read": true,
+          ".write": "auth != null && (root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin' || (root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'teacher' && $key.beginsWith('student_')))",
+          ".validate": "newData.hasChildren(['type', 'id', 'fullName']) && $key.beginsWith(newData.child('type').val() + '_') && $key.length <= 60",
+          "type": { ".validate": "newData.isString() && (newData.val() === 'student' || newData.val() === 'teacher')" },
+          "id": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 40" },
+          "firstName": { ".validate": "newData.isString() && newData.val().length <= 60" },
+          "middleName": { ".validate": "newData.isString() && newData.val().length <= 60" },
+          "lastName": { ".validate": "newData.isString() && newData.val().length <= 60" },
+          "fullName": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 200" },
+          "photoUrl": { ".validate": "newData.isString() && newData.val().length <= 500 && newData.val().beginsWith('https://')" },
+          "gender": { ".validate": "newData.isString() && newData.val().length <= 20" },
+          "status": { ".validate": "newData.isString() && newData.val().length <= 20" },
+          // Students
+          "className": { ".validate": "newData.isString() && newData.val().length <= 60" },
+          "level": { ".validate": "newData.isString() && newData.val().length <= 40" },
+          "department": { ".validate": "newData.isString() && newData.val().length <= 40" },
+          "admissionYear": { ".validate": "newData.isString() && newData.val().length <= 4" },
+          "address": { ".validate": "newData.isString() && newData.val().length <= 300" },
+          "npseId": { ".validate": "newData.isString() && newData.val().length <= 20" },
+          "npseYear": { ".validate": "newData.isString() && newData.val().length <= 4" },
+          "beceId": { ".validate": "newData.isString() && newData.val().length <= 20" },
+          "beceYear": { ".validate": "newData.isString() && newData.val().length <= 4" },
+          "wassceId": { ".validate": "newData.isString() && newData.val().length <= 20" },
+          "wassceYear": { ".validate": "newData.isString() && newData.val().length <= 4" },
+          "registeredAt": { ".validate": "newData.isNumber()" },
+          "lastPromotedAt": { ".validate": "newData.isNumber()" },
+          // Promotion history: admins only (the school's history is admin-only).
+          "history": {
+            ".validate": "root.child('schools').child($sid).child('members').child(auth.uid).child('role').val() === 'schoolAdmin'",
+            "$h": {
+              "fromClass": { ".validate": "newData.isString() && newData.val().length <= 60" },
+              "toClass": { ".validate": "newData.isString() && newData.val().length <= 60" },
+              "academicYear": { ".validate": "newData.isString() && newData.val().length <= 20" },
+              "date": { ".validate": "newData.isNumber()" },
+              "$other": { ".validate": false }
+            }
+          },
+          // Shown when present; the app does not record these yet.
+          "fees": {
+            "total": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+            "paid": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+            "lastPaymentAt": { ".validate": "newData.isNumber()" },
+            "$other": { ".validate": false }
+          },
+          "results": {
+            "position": { ".validate": "newData.isNumber() && newData.val() >= 1" },
+            "classSize": { ".validate": "newData.isNumber() && newData.val() >= 1" },
+            "totalScore": { ".validate": "newData.isNumber()" },
+            "average": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100" },
+            "subjects": { "$subject": { ".validate": "newData.isNumber()" } },
+            "$other": { ".validate": false }
+          },
+          "remarks": {
+            "$remark": { ".validate": "newData.isString() && newData.val().length <= 2000" }
+          },
+          // Teachers
+          "rank": { ".validate": "newData.isString() && newData.val().length <= 40" },
+          "subjects": { ".validate": "newData.isString() && newData.val().length <= 500" },
+          "teachingLevel": { ".validate": "newData.isString() && newData.val().length <= 10" },
+          "stream": { ".validate": "newData.isString() && newData.val().length <= 40" },
+          "updatedAt": { ".validate": "newData.isNumber() && newData.val() <= now" },
+          "$other": { ".validate": false }
+        }
+      }
+    },
+
     "schools": {
       "$sid": {
         // Creating a brand-new school (onboarding). The creator must be the

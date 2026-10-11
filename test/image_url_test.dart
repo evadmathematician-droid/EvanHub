@@ -25,4 +25,11 @@ void main() {
     expect(cloudinaryResized('https://example.com/a.jpg', width: 900),
         'https://example.com/a.jpg');
   });
+
+  test('face crop for round frames replaces existing transformations', () {
+    expect(cloudinaryFaceCrop('${base}c_limit,w_900/$path'),
+        '${base}c_fill,g_face,w_300,h_300,q_auto,f_auto/$path');
+    expect(cloudinaryFaceCrop('https://example.com/a.jpg'),
+        'https://example.com/a.jpg');
+  });
 }

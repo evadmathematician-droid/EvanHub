@@ -4,8 +4,10 @@ import 'package:firebase_database/firebase_database.dart';
 
 import '../core/offline_write.dart';
 import '../core/rtdb.dart';
+import '../core/tenant/tenant_refs.dart';
 import '../models/school.dart';
 import '../models/user_role.dart';
+import 'public_lookup_service.dart';
 
 /// Onboarding + school-profile operations. These write to top-level
 /// `schools/...` and `users/...`, so they take a [FirebaseDatabase] directly
@@ -58,9 +60,15 @@ class SchoolService {
         'updatedAt': now,
       },
     });
+    // Listed on the Look Up screen. A separate write: the rules check the
+    // admin membership the update above just created.
+    _lookup(schoolId).publishSchool(meta);
 
     return schoolId;
   }
+
+  PublicLookupService _lookup(String schoolId) =>
+      PublicLookupService(TenantRefs(schoolId, database: _db));
 
   /// The school's `profile` and `subscription`, combined. Emits once both have
   /// loaded and again whenever either changes.
@@ -110,13 +118,25 @@ class SchoolService {
   /// Sets one image URL on the profile (`logoUrl`, `stampUrl`), or removes
   /// it when [url] is null. Only that field is written, so nothing else on
   /// the profile can be overwritten by an older copy.
-  Future<void> setProfileImage(String schoolId, String field, String? url) =>
-      commitWrite(_db.ref('schools/$schoolId/profile/$field').set(url));
+  Future<void> setProfileImage(
+      String schoolId, String field, String? url) async {
+    await commitWrite(_db.ref('schools/$schoolId/profile/$field').set(url));
+    // The badge is shown in the public school list too.
+    if (field != 'logoUrl') return;
+    try {
+      final meta = SchoolMeta.fromMap(
+          asMap((await readOnce(_db.ref('schools/$schoolId/profile'))).value));
+      if (meta.name.isNotEmpty) _lookup(schoolId).publishSchool(meta);
+    } on TimeoutException {
+      // Not on this phone yet; "Publish Lookup Data" refreshes it.
+    }
+  }
 
-  Future<void> updateMeta(String schoolId, SchoolMeta meta) {
-    return commitWrite(_db.ref('schools/$schoolId/profile').set({
+  Future<void> updateMeta(String schoolId, SchoolMeta meta) async {
+    await commitWrite(_db.ref('schools/$schoolId/profile').set({
       ...meta.toMap(),
       'updatedAt': ServerValue.timestamp,
     }));
+    _lookup(schoolId).publishSchool(meta);
   }
 }

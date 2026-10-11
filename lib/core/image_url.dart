@@ -26,3 +26,16 @@ String _withoutTransformations(String path) {
   }
   return parts.sublist(i).join('/');
 }
+
+/// A square, face-centred crop for round photo frames (the Look Up result):
+/// `c_fill,g_face,w_{size},h_{size}` after `/upload/`, replacing any
+/// transformation already in the URL. Non-Cloudinary URLs are returned
+/// unchanged (the frame still crops them with `BoxFit.cover`).
+String cloudinaryFaceCrop(String url, {int size = 300}) {
+  const marker = '/upload/';
+  final at = url.indexOf(marker);
+  if (at == -1) return url;
+  final split = at + marker.length;
+  return '${url.substring(0, split)}c_fill,g_face,w_$size,h_$size,q_auto,f_auto/'
+      '${_withoutTransformations(url.substring(split))}';
+}

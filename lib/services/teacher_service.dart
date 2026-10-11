@@ -4,6 +4,7 @@ import '../core/offline_write.dart';
 import '../core/rtdb.dart';
 import '../core/tenant/tenant_refs.dart';
 import '../models/teacher.dart';
+import 'public_lookup_service.dart';
 
 class TeacherService {
   TeacherService(this._refs);
@@ -93,16 +94,20 @@ class TeacherService {
       updates['index/nin/$previousNin'] = null;
     }
     await commitWrite(_refs.school.update(updates));
+    // The public Look Up copy (keyed by NIN) follows, queued offline.
+    PublicLookupService(_refs).publishTeacher(teacher, previousNin: previousNin);
     return id;
   }
 
-  /// Removes the public record, private record and NIN index entry together.
-  /// [teacher] must have its private half loaded (for the NIN).
-  Future<void> delete(Teacher teacher) {
-    return commitWrite(_refs.school.update({
+  /// Removes the public record, private record and NIN index entry together,
+  /// and the public Look Up copy. [teacher] must have its private half
+  /// loaded (for the NIN).
+  Future<void> delete(Teacher teacher) async {
+    await commitWrite(_refs.school.update({
       'teachers/${teacher.id}': null,
       'teacherPrivate/${teacher.id}': null,
       if (teacher.nin.isNotEmpty) 'index/nin/${teacher.nin}': null,
     }));
+    PublicLookupService(_refs).removeTeacher(teacher);
   }
 }

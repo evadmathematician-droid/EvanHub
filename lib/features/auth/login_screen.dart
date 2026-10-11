@@ -150,6 +150,17 @@ class _LoginScreenState extends State<LoginScreen> {
                           : () => context.push(Routes.onboarding),
                       child: const Text('Register your school'),
                     ),
+                    const Divider(height: 32),
+                    const Text('Pupil, parent or teacher?',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: AppColors.textSecondary)),
+                    const SizedBox(height: 8),
+                    FilledButton.tonalIcon(
+                      onPressed:
+                          _busy ? null : () => context.push(Routes.lookup),
+                      icon: const Icon(Icons.manage_search),
+                      label: const Text('Look Up a Record (no login needed)'),
+                    ),
                   ],
                 ),
               ),
