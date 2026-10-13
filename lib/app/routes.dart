@@ -29,6 +29,10 @@ class Routes {
   static String classEdit(String id) => '/classes/$id/edit';
   static const promote = '/classes/promote';
 
+  /// [level] is a `ReportLevel` name: `jss` or `ss`.
+  static const reportCards = '/report-cards';
+  static String reportCardLevel(String level) => '/report-cards/$level';
+
   static const documents = '/documents';
 
   static const announcements = '/announcements';

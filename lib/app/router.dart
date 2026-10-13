@@ -19,6 +19,9 @@ import '../features/join/join_screen.dart';
 import '../features/lookup/lookup_screen.dart';
 import '../features/more/more_screen.dart';
 import '../features/onboarding/school_onboarding_screen.dart';
+import '../features/report_cards/report_card_class_screen.dart';
+import '../features/report_cards/report_card_data.dart';
+import '../features/report_cards/report_cards_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/students/student_form_screen.dart';
 import '../features/students/students_list_screen.dart';
@@ -157,6 +160,19 @@ GoRouter buildRouter(AuthController auth) {
         path: '/classes/:id/edit',
         builder: (_, state) =>
             ClassFormScreen(existing: state.extra as SchoolClass?),
+      ),
+      GoRoute(
+        path: Routes.reportCards,
+        builder: (_, _) => const ReportCardsScreen(),
+      ),
+      GoRoute(
+        path: '/report-cards/:level',
+        builder: (_, state) => ReportCardClassScreen(
+          level: ReportLevel.values.firstWhere(
+            (l) => l.name == state.pathParameters['level'],
+            orElse: () => ReportLevel.jss,
+          ),
+        ),
       ),
       GoRoute(
         path: Routes.documents,

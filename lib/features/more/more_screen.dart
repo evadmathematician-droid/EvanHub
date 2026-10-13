@@ -19,6 +19,9 @@ class MoreScreen extends StatelessWidget {
       // The database rules let only school admins write promotions.
       if (auth.role == UserRole.schoolAdmin)
         _MoreItem('Promotion', Icons.trending_up, Routes.promote),
+      // Same people who can see pupils' records (admins and teachers).
+      if (auth.role.canManageStudents)
+        _MoreItem('Report Cards', Icons.assignment_outlined, Routes.reportCards),
       _MoreItem('Documents', Icons.folder_outlined, Routes.documents),
       _MoreItem('Announcements', Icons.campaign_outlined, Routes.announcements),
       _MoreItem('Settings', Icons.settings_outlined, Routes.settings),
