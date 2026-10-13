@@ -67,6 +67,9 @@ flutter:
     - assets/images/
     # Logo on the mandatory-update screen (lib/force_update).
     - assets/icon/app_icon.png
+    # Liberation Serif / Sans (SIL OFL) for the report-card PDF, bundled so it
+    # prints offline with curly quotes and dashes.
+    - assets/fonts/
 
 # App icon. Source: assets/icon/profile.jpeg (the EvanHub logo), converted to
 # 1024x1024 PNGs. Regenerate with: dart run flutter_launcher_icons
