@@ -443,55 +443,55 @@ pw.Widget _rightPanel(
   final principalName = principal.trim();
 
   final children = <pw.Widget>[
+    // Header, badge, motto and the Founded box form one compact block at
+    // the top with moderate, even gaps; the pupil lines stay at the bottom.
     for (final line in nameLines)
       _fitLine(f.text(line), serifBold(twoLines ? 24 : 30),
           height: twoLines ? 27 : 34),
-    pw.SizedBox(height: 2),
+    pw.SizedBox(height: 7),
     _fitLine(f.text(level.levelLine), serifBold(15), height: 18),
-    if (school.town.isNotEmpty)
+    if (school.town.isNotEmpty) ...[
+      pw.SizedBox(height: 3),
       _fitLine(f.text(school.town.toUpperCase()), serifBold(12.5), height: 15),
-    if (school.district.isNotEmpty)
+    ],
+    if (school.district.isNotEmpty) ...[
+      pw.SizedBox(height: 2),
       _fitLine(
         f.text(school.district.toUpperCase()),
         pw.TextStyle(font: f.serifBoldItalic, fontSize: 12.5),
         height: 15,
       ),
+    ],
+    pw.SizedBox(height: 10),
 
-    // The crest takes whatever height is left, centred; a plain badge
+    // The crest, centred at a fixed size (aspect ratio kept); a plain badge
     // outline when it could not be downloaded.
-    pw.Expanded(
-      child: pw.Padding(
-        padding: const pw.EdgeInsets.symmetric(vertical: 6),
-        child: pw.Center(
-          child: pw.ConstrainedBox(
-            constraints:
-                const pw.BoxConstraints(maxHeight: 140, maxWidth: 160),
-            child: assets.logo == null
-                ? _logoPlaceholder(f)
-                : pw.Image(assets.logo!, fit: pw.BoxFit.contain),
-          ),
-        ),
-      ),
+    pw.ConstrainedBox(
+      constraints: const pw.BoxConstraints(maxHeight: 165, maxWidth: 200),
+      child: assets.logo == null
+          ? _logoPlaceholder(f)
+          : pw.Image(assets.logo!, fit: pw.BoxFit.contain),
     ),
+    pw.SizedBox(height: 8),
 
-    if (motto.isNotEmpty)
-      pw.Padding(
-        padding: const pw.EdgeInsets.only(bottom: 5),
-        child: pw.RichText(
-          textAlign: pw.TextAlign.center,
-          maxLines: 2,
-          text: pw.TextSpan(children: [
-            pw.TextSpan(
-                text: f.text(ReportCardTexts.mottoLabel),
-                style: pw.TextStyle(font: f.serif, fontSize: 11.5)),
-            pw.TextSpan(text: f.text('“$motto”'), style: serifBold(11.5)),
-          ]),
-        ),
+    if (motto.isNotEmpty) ...[
+      pw.RichText(
+        textAlign: pw.TextAlign.center,
+        maxLines: 2,
+        text: pw.TextSpan(children: [
+          pw.TextSpan(
+              text: f.text(ReportCardTexts.mottoLabel),
+              style: pw.TextStyle(font: f.serif, fontSize: 11.5)),
+          pw.TextSpan(text: f.text('“$motto”'), style: serifBold(11.5)),
+        ]),
       ),
+      pw.SizedBox(height: 9),
+    ],
 
+    // Founded: 1965 / CONTINUOUS ASSESSMENT / REPORT CARD (strongest).
     pw.Container(
       width: double.infinity,
-      padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const pw.EdgeInsets.fromLTRB(10, 6, 10, 7),
       decoration: pw.BoxDecoration(border: pw.Border.all(width: 2.5)),
       child: pw.Column(
         children: [
@@ -502,12 +502,24 @@ pw.Widget _rightPanel(
                     : school.founded)),
             style: pw.TextStyle(font: f.sansBold, fontSize: 10.5),
           ),
-          pw.SizedBox(height: 2),
-          _fitLine(f.text(ReportCardTexts.assessmentLine), serifBold(13.5),
-              height: 17),
+          pw.SizedBox(height: 4),
+          _fitLine(
+            f.text(ReportCardTexts.assessmentLine),
+            pw.TextStyle(font: f.serif, fontSize: 13.5),
+            height: 17,
+          ),
+          pw.SizedBox(height: 1),
+          _fitLine(
+            f.text(ReportCardTexts.reportCardLine),
+            serifBold(18.5),
+            height: 22,
+          ),
         ],
       ),
     ),
+
+    // What is left goes above the pupil lines, keeping them at the bottom.
+    pw.Spacer(),
     pw.SizedBox(height: 10),
 
     // Name of Pupil: CONTEH AMARA PATRICK (red, on a green line)
