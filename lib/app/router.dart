@@ -21,6 +21,7 @@ import '../features/more/more_screen.dart';
 import '../features/onboarding/school_onboarding_screen.dart';
 import '../features/report_cards/report_card_class_screen.dart';
 import '../features/report_cards/report_card_data.dart';
+import '../features/report_cards/report_card_profile.dart';
 import '../features/report_cards/report_cards_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/students/student_form_screen.dart';
@@ -164,6 +165,10 @@ GoRouter buildRouter(AuthController auth) {
       GoRoute(
         path: Routes.reportCards,
         builder: (_, _) => const ReportCardsScreen(),
+      ),
+      GoRoute(
+        path: Routes.reportCardProfile,
+        builder: (_, _) => const ReportCardProfileScreen(),
       ),
       GoRoute(
         path: '/report-cards/:level',

@@ -164,10 +164,9 @@ class ReportCardSchool {
           : addrDistrict,
       motto: text(const ['motto']),
       founded: text(const [
-        'founded',
         'foundedYear',
+        'founded',
         'yearFounded',
-        'funded',
         'established',
         'yearEstablished',
       ]),

@@ -212,6 +212,9 @@
           "coverUrl": { ".validate": "newData.isString() && newData.val().length <= 500 && (newData.val() === '' || newData.val().beginsWith('https://'))" },
           "stampUrl": { ".validate": "newData.isString() && newData.val().length <= 500 && (newData.val() === '' || newData.val().beginsWith('https://'))" },
           "headName": { ".validate": "newData.isString() && newData.val().length <= 120" },
+          // Printed on report card covers.
+          "motto": { ".validate": "newData.isString() && newData.val().length <= 150" },
+          "foundedYear": { ".validate": "newData.isNumber() && newData.val() >= 1800 && newData.val() <= 2100" },
           // Public Look Up consent (missing = approved, for older schools).
           "lookupEnabled": { ".validate": "newData.isBoolean()" },
           "lookupConsentAt": { ".validate": "newData.isNumber() && newData.val() <= now" },

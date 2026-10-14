@@ -86,7 +86,10 @@ class _ReportCardClassScreenState extends State<ReportCardClassScreen> {
     }
     setState(() => _busy = true);
     try {
-      final school = await _school;
+      // Read again now, so the cards get the latest motto / year and the
+      // badge is downloaded (or taken from the cache) before drawing.
+      final school = await loadReportCardSchool(
+          context.read<AuthController>().tenant!);
       final bytes = await buildReportCardsPdf(
         pupils: [for (final s in pupils) ReportCardPupil.fromStudent(s, form)],
         school: school,

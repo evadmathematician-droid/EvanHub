@@ -229,12 +229,15 @@ void _star(PdfGraphics canvas, double cx, double cy, double r) {
 
 // --- Left panel -------------------------------------------------------------
 
+/// The key box takes two thirds of the panel height and the notice box the
+/// last third. The wording is fixed (ReportCardTexts), so the sizes below
+/// are chosen to fill each box without overflowing it.
 pw.Widget _leftPanel(ReportCardFonts f) {
-  const size = 6.8;
-  final plain = pw.TextStyle(font: f.sans, fontSize: size, lineSpacing: 1.2);
+  const size = 9.0;
+  final plain = pw.TextStyle(font: f.sans, fontSize: size, lineSpacing: 1.6);
   final heading = pw.TextStyle(
     font: f.sansBold,
-    fontSize: size + 0.4,
+    fontSize: size + 0.5,
     decoration: pw.TextDecoration.underline,
   );
 
@@ -244,7 +247,7 @@ pw.Widget _leftPanel(ReportCardFonts f) {
       );
 
   pw.Widget headed(String title, String note) => pw.Padding(
-        padding: const pw.EdgeInsets.only(top: 5, bottom: 1),
+        padding: const pw.EdgeInsets.only(bottom: 1.5),
         child: pw.RichText(
           text: pw.TextSpan(children: [
             pw.TextSpan(text: f.text(title), style: heading),
@@ -253,36 +256,40 @@ pw.Widget _leftPanel(ReportCardFonts f) {
         ),
       );
 
+  pw.Widget section(String title, String note, List<String> items) =>
+      pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [headed(title, note), lines(items)],
+      );
+
+  // The sections are spread over the box height.
   final keyBox = pw.Container(
-    padding: const pw.EdgeInsets.all(7),
+    padding: const pw.EdgeInsets.fromLTRB(8, 7, 8, 7),
     decoration: pw.BoxDecoration(border: pw.Border.all(width: 3.5)),
     child: pw.Column(
+      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         pw.Text(f.text(ReportCardTexts.keyLine), style: plain),
-        headed(ReportCardTexts.affectiveHeading, ''),
-        lines(ReportCardTexts.affective),
-        headed(ReportCardTexts.psychomotorHeading,
-            ReportCardTexts.psychomotorNote),
-        lines(ReportCardTexts.psychomotor),
-        headed(
-            ReportCardTexts.cognitiveHeading, ReportCardTexts.cognitiveNote),
-        lines(ReportCardTexts.cognitive),
-        pw.SizedBox(height: 3),
+        section(ReportCardTexts.affectiveHeading, '', ReportCardTexts.affective),
+        section(ReportCardTexts.psychomotorHeading,
+            ReportCardTexts.psychomotorNote, ReportCardTexts.psychomotor),
+        section(ReportCardTexts.cognitiveHeading,
+            ReportCardTexts.cognitiveNote, ReportCardTexts.cognitive),
         pw.Text(f.text(ReportCardTexts.ratings), style: plain),
       ],
     ),
   );
 
   final noticeStyle =
-      pw.TextStyle(font: f.sans, fontSize: 7.5, lineSpacing: 1.6);
+      pw.TextStyle(font: f.sans, fontSize: 7.4, lineSpacing: 0.9);
   final noticeBox = pw.Container(
-    padding: const pw.EdgeInsets.fromLTRB(9, 8, 9, 8),
+    padding: const pw.EdgeInsets.fromLTRB(9, 6, 9, 6),
     decoration: pw.BoxDecoration(
       border: pw.Border.all(width: 3, style: pw.BorderStyle.dashed),
     ),
     child: pw.Column(
-      mainAxisAlignment: pw.MainAxisAlignment.center,
+      mainAxisAlignment: pw.MainAxisAlignment.spaceEvenly,
       crossAxisAlignment: pw.CrossAxisAlignment.stretch,
       children: [
         pw.Text(
@@ -291,11 +298,8 @@ pw.Widget _leftPanel(ReportCardFonts f) {
           style: pw.TextStyle(font: f.sansBold, fontSize: 8.5),
         ),
         for (final para in ReportCardTexts.notice)
-          pw.Padding(
-            padding: const pw.EdgeInsets.only(top: 12),
-            child: pw.Text(f.text(para),
-                style: noticeStyle, textAlign: pw.TextAlign.justify),
-          ),
+          pw.Text(f.text(para),
+              style: noticeStyle, textAlign: pw.TextAlign.justify),
       ],
     ),
   );
@@ -303,9 +307,9 @@ pw.Widget _leftPanel(ReportCardFonts f) {
   return pw.Column(
     crossAxisAlignment: pw.CrossAxisAlignment.stretch,
     children: [
-      keyBox,
-      pw.SizedBox(height: 10),
-      pw.Expanded(child: noticeBox),
+      pw.Expanded(flex: 2, child: keyBox),
+      pw.SizedBox(height: 8),
+      pw.Expanded(flex: 1, child: noticeBox),
     ],
   );
 }
@@ -358,17 +362,28 @@ pw.Widget _middlePanel(ReportCardFonts f) {
 
 // --- Right panel ------------------------------------------------------------
 
-/// One line of text, shrunk to fit [height] and the available width.
+/// One line of text in [height], its font size reduced until it fits the
+/// available width. The text is measured, not scaled and clipped (some PDF
+/// viewers cut scaled text off: "EVANGELIST ACADE").
 pw.Widget _fitLine(String text, pw.TextStyle style,
         {required double height,
         pw.Alignment alignment = pw.Alignment.center}) =>
     pw.SizedBox(
       height: height,
-      child: pw.FittedBox(
-        fit: pw.BoxFit.scaleDown,
-        alignment: alignment,
-        child: pw.Text(text, style: style),
-      ),
+      child: pw.LayoutBuilder(builder: (context, constraints) {
+        final size = style.fontSize!;
+        final maxWidth = constraints?.maxWidth ?? double.infinity;
+        final unitWidth =
+            style.font!.getFont(context).stringMetrics(text).advanceWidth;
+        // A little spare width, so rounding never wraps the line.
+        final fitted = unitWidth <= 0 || !maxWidth.isFinite
+            ? size
+            : math.min(size, maxWidth * 0.97 / unitWidth);
+        return pw.Align(
+          alignment: alignment,
+          child: pw.Text(text, style: style.copyWith(fontSize: fitted)),
+        );
+      }),
     );
 
 /// The school name as one or two lines: split at the space nearest the
@@ -389,6 +404,25 @@ List<String> _nameLines(String name) {
   }
   return [words.take(best).join(' '), words.skip(best).join(' ')];
 }
+
+/// Stands in for the school badge when it could not be downloaded: a
+/// circle outline marked "SCHOOL BADGE".
+pw.Widget _logoPlaceholder(ReportCardFonts f) => pw.AspectRatio(
+      aspectRatio: 1,
+      child: pw.Container(
+        decoration: pw.BoxDecoration(
+          shape: pw.BoxShape.circle,
+          border: pw.Border.all(width: 1.5, color: PdfColors.grey600),
+        ),
+        alignment: pw.Alignment.center,
+        child: pw.Text(
+          f.text('SCHOOL\nBADGE'),
+          textAlign: pw.TextAlign.center,
+          style: pw.TextStyle(
+              font: f.sansBold, fontSize: 11, color: PdfColors.grey600),
+        ),
+      ),
+    );
 
 pw.Widget _rightPanel(
   ReportCardPupil pupil,
@@ -423,19 +457,20 @@ pw.Widget _rightPanel(
         height: 15,
       ),
 
-    // The crest takes whatever height is left; blank when there is none.
+    // The crest takes whatever height is left, centred; a plain badge
+    // outline when it could not be downloaded.
     pw.Expanded(
       child: pw.Padding(
-        padding: const pw.EdgeInsets.symmetric(vertical: 5),
-        child: assets.logo == null
-            ? pw.SizedBox()
-            : pw.Center(
-                child: pw.ConstrainedBox(
-                  constraints:
-                      const pw.BoxConstraints(maxHeight: 150, maxWidth: 180),
-                  child: pw.Image(assets.logo!, fit: pw.BoxFit.contain),
-                ),
-              ),
+        padding: const pw.EdgeInsets.symmetric(vertical: 6),
+        child: pw.Center(
+          child: pw.ConstrainedBox(
+            constraints:
+                const pw.BoxConstraints(maxHeight: 140, maxWidth: 160),
+            child: assets.logo == null
+                ? _logoPlaceholder(f)
+                : pw.Image(assets.logo!, fit: pw.BoxFit.contain),
+          ),
+        ),
       ),
     ),
 
@@ -448,7 +483,7 @@ pw.Widget _rightPanel(
           text: pw.TextSpan(children: [
             pw.TextSpan(
                 text: f.text(ReportCardTexts.mottoLabel),
-                style: serifBold(11.5)),
+                style: pw.TextStyle(font: f.serif, fontSize: 11.5)),
             pw.TextSpan(text: f.text('“$motto”'), style: serifBold(11.5)),
           ]),
         ),
@@ -461,17 +496,15 @@ pw.Widget _rightPanel(
       child: pw.Column(
         children: [
           pw.Text(
-            f.text(ReportCardTexts.fundedLabel +
+            f.text(ReportCardTexts.foundedLabel +
                 (school.founded.isEmpty
                     ? ReportCardTexts.dots
                     : school.founded)),
-            style: pw.TextStyle(font: f.sansBold, fontSize: 10),
+            style: pw.TextStyle(font: f.sansBold, fontSize: 10.5),
           ),
           pw.SizedBox(height: 2),
-          pw.Text(f.text(ReportCardTexts.assessmentLine),
-              style: serifBold(13.5)),
-          pw.Text(f.text(ReportCardTexts.reportCardLine),
-              style: serifBold(13.5)),
+          _fitLine(f.text(ReportCardTexts.assessmentLine), serifBold(13.5),
+              height: 17),
         ],
       ),
     ),

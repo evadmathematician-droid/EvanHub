@@ -3,6 +3,8 @@ import 'dart:typed_data';
 
 import 'package:evangelistglobal/features/report_cards/report_card_data.dart';
 import 'package:evangelistglobal/features/report_cards/report_card_pdf.dart';
+import 'package:evangelistglobal/features/report_cards/report_card_profile.dart';
+import 'package:evangelistglobal/models/school.dart';
 import 'package:evangelistglobal/models/school_class.dart';
 import 'package:evangelistglobal/models/school_level.dart';
 import 'package:evangelistglobal/models/student.dart';
@@ -220,6 +222,85 @@ void main() {
 
     test('no pupils is refused', () {
       expect(build(const []), throwsArgumentError);
+    });
+  });
+
+  group('report card profile gate', () {
+    final now = DateTime(2026, 10, 14);
+
+    test('year founded must be 4 digits from 1800 to this year', () {
+      expect(foundedYearProblem('1965', now: now), isNull);
+      expect(foundedYearProblem(' 1800 ', now: now), isNull);
+      expect(foundedYearProblem('2026', now: now), isNull);
+      for (final bad in ['', '196', '19655', '1799', '2027', '19a5']) {
+        expect(foundedYearProblem(bad, now: now), isNotNull, reason: bad);
+      }
+    });
+
+    test('needs badge, motto and year founded', () {
+      const full = SchoolMeta(
+        name: 'Evangelist Academy',
+        logoUrl: 'https://res.cloudinary.com/x/image/upload/badge.png',
+        motto: 'Knowledge is power',
+        foundedYear: 1965,
+      );
+      expect(hasReportCardProfile(full), isTrue);
+      expect(hasReportCardProfile(const SchoolMeta(name: 'A')), isFalse);
+      expect(
+          hasReportCardProfile(SchoolMeta(
+              name: full.name, motto: full.motto, foundedYear: 1965)),
+          isFalse,
+          reason: 'no badge');
+      expect(
+          hasReportCardProfile(SchoolMeta(
+              name: full.name, logoUrl: full.logoUrl, foundedYear: 1965)),
+          isFalse,
+          reason: 'no motto');
+      expect(
+          hasReportCardProfile(SchoolMeta(
+              name: full.name, logoUrl: full.logoUrl, motto: full.motto)),
+          isFalse,
+          reason: 'no year');
+      expect(hasReportCardProfile(full.copyWith(foundedYear: 1700)), isFalse);
+    });
+
+    test('motto and year survive a profile save', () {
+      final meta = SchoolMeta.fromMap(
+          {'name': 'A', 'motto': 'Learn', 'foundedYear': 1965});
+      expect(meta.motto, 'Learn');
+      expect(meta.foundedYear, 1965);
+      final saved = meta.copyWith(address: 'Lungi').toMap();
+      expect(saved['motto'], 'Learn');
+      expect(saved['foundedYear'], 1965);
+      expect(const SchoolMeta(name: 'A').toMap()['motto'], isNull);
+    });
+
+    test('cover reads the saved year founded', () {
+      final s = ReportCardSchool.fromProfile(
+          {'name': 'Evangelist Academy', 'foundedYear': 1965, 'motto': 'X'});
+      expect(s.founded, '1965');
+      expect(s.motto, 'X');
+    });
+
+    test('long school names and no badge still make a page', () async {
+      for (final fonts in [null, ReportCardFonts.builtIn()]) {
+        final pdf = await buildReportCardsPdf(
+          pupils: const [
+            ReportCardPupil(
+                surname: 'A', firstName: 'B', form: ReportForm(ReportLevel.ss, 1)),
+          ],
+          school: const ReportCardSchool(
+            name: 'The Very Long Named United Methodist Church Evangelist '
+                'Memorial Comprehensive Academy of Sierra Leone',
+            motto: 'Knowledge is power',
+            founded: '1965',
+          ),
+          level: ReportLevel.ss,
+          principal: 'P',
+          fonts: fonts,
+        );
+        expect(pageCount(pdf), 1);
+      }
     });
   });
 }

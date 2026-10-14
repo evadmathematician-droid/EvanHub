@@ -139,6 +139,17 @@ class SchoolService {
     }
   }
 
+  /// Sets the motto and year founded printed on report card covers. Only
+  /// those two fields are written, like [setProfileImage].
+  Future<void> setReportCardDetails(String schoolId,
+      {required String motto, required int foundedYear}) async {
+    await commitWrite(_db.ref('schools/$schoolId/profile').update({
+      'motto': motto.trim(),
+      'foundedYear': foundedYear,
+      'updatedAt': ServerValue.timestamp,
+    }));
+  }
+
   Future<void> updateMeta(String schoolId, SchoolMeta meta) async {
     await commitWrite(_db.ref('schools/$schoolId/profile').set({
       ...meta.toMap(),

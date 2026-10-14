@@ -5,7 +5,7 @@ class ReportCardTexts {
 
   // --- Left panel, top box (key) -------------------------------------------
 
-  static const keyLine = 'Key: Mn = Average; Bok = Position';
+  static const keyLine = 'Key: Mn = Average; Pos = Position';
 
   static const affectiveHeading = 'Affective.';
   static const affective = [
@@ -78,9 +78,8 @@ class ReportCardTexts {
   static const juniorLevelLine = 'JUNIOR SECONDARY SCHOOL';
   static const seniorLevelLine = 'SENIOR SECONDARY SCHOOL';
   static const mottoLabel = 'Motto: ';
-  static const fundedLabel = 'Funded: ';
-  static const assessmentLine = 'CONTINUOUS ASSESSMENT';
-  static const reportCardLine = 'REPORT CARD';
+  static const foundedLabel = 'Founded: ';
+  static const assessmentLine = 'CONTINUOUS ASSESSMENT REPORT CARD';
   static const pupilNameLabel = 'Name of Pupil: ';
   static const admissionLabel = 'Admission Number: ';
   static const formLabel = 'Form: ';

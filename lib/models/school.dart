@@ -44,6 +44,13 @@ class SchoolMeta {
   /// here only so saving the profile does not erase it.
   final int? publicIndexVersion;
 
+  /// School motto, printed on report card covers ('' when not set).
+  final String motto;
+
+  /// Year the school was founded, printed on report card covers. Null when
+  /// not set.
+  final int? foundedYear;
+
   const SchoolMeta({
     required this.name,
     this.logoUrl,
@@ -60,6 +67,8 @@ class SchoolMeta {
     this.adminPhone = '',
     this.adminWhatsApp = '',
     this.publicIndexVersion,
+    this.motto = '',
+    this.foundedYear,
   });
 
   /// Look Up is on unless the school switched it off.
@@ -85,6 +94,12 @@ class SchoolMeta {
         adminPhone: (map['adminPhone'] ?? '') as String,
         adminWhatsApp: (map['adminWhatsApp'] ?? '') as String,
         publicIndexVersion: (map['publicIndexVersion'] as num?)?.toInt(),
+        motto: (map['motto'] ?? '').toString(),
+        foundedYear: switch (map['foundedYear']) {
+          final num n => n.toInt(),
+          final String t => int.tryParse(t.trim()),
+          _ => null,
+        },
       );
 
   Map<String, dynamic> toMap() => {
@@ -105,6 +120,8 @@ class SchoolMeta {
         'adminWhatsApp': adminWhatsApp,
         'adminWhatsAppIntl': adminWhatsAppIntl,
         'publicIndexVersion': publicIndexVersion,
+        'motto': motto.trim().isEmpty ? null : motto.trim(),
+        'foundedYear': foundedYear,
       };
 
   SchoolMeta copyWith({
@@ -122,6 +139,8 @@ class SchoolMeta {
     String? adminName,
     String? adminPhone,
     String? adminWhatsApp,
+    String? motto,
+    int? foundedYear,
   }) =>
       SchoolMeta(
         name: name ?? this.name,
@@ -139,6 +158,8 @@ class SchoolMeta {
         adminPhone: adminPhone ?? this.adminPhone,
         adminWhatsApp: adminWhatsApp ?? this.adminWhatsApp,
         publicIndexVersion: publicIndexVersion,
+        motto: motto ?? this.motto,
+        foundedYear: foundedYear ?? this.foundedYear,
       );
 }
 
